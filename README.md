@@ -1,0 +1,21 @@
+# Centrum wolontariatu
+Projekt zespołowy - Karol Przybyłowski, Maksym Kovalchuk, Szymon Drdzeń
+
+# Setup
+#### 1. Clone the repository
+```bash
+git clone https://github.com/karolp-02/centrum_wolontariatu_proj_zesp.git
+cd financepocket
+```
+#### 2. Copy the environment config
+```bash
+cp .env.example .env
+```
+#### 3. Edit `.env` with your own values
+
+#### 4. Start the application
+```bash
+docker-compose up -d
+```
+
+#### 5. Open http://localhost:8000 in your browser
