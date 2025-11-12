@@ -1,3 +1,306 @@
-from rest_framework import viewsets
-from wolontariat.models import Item
-from .serializers import ItemSerializer
+from rest_framework import viewsets, status
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
+from rest_framework.authtoken.models import Token
+from rest_framework.response import Response
+from django.db.models import Q
+from django.contrib.auth import authenticate
+from django.http import HttpResponse
+from django.core.files import File
+from django.conf import settings
+
+from wolontariat.models import Projekt, Oferta
+from django.http import HttpResponse
+from .serializers import (
+    ProjektSerializer, OfertaSerializer, OfertaCreateSerializer,
+)
+from .permissions import IsOrganization, IsOwnerOrReadOnly
+import os
+
+
+
+class ProjektViewSet(viewsets.ModelViewSet):
+    serializer_class = ProjektSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = Projekt.objects.all()
+
+        # Filter by organization
+        organizacja_id = self.request.query_params.get('organizacja')
+        if organizacja_id:
+            queryset = queryset.filter(organizacja_id=organizacja_id)
+
+        # Search in project name or description
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(nazwa_projektu__icontains=search) |
+                Q(opis_projektu__icontains=search)
+            )
+
+        return queryset
+
+    def perform_create(self, serializer):
+        if self.request.user.rola not in ['organizacja', 'koordynator']:
+            raise PermissionError('Only organizations and coordinators can create projects')
+
+        if self.request.user.rola == 'organizacja' and self.request.user.organizacja:
+            serializer.save(organizacja=self.request.user.organizacja)
+        else:
+            serializer.save()
+
+    @action(detail=True, methods=['get'])
+    def oferty(self, request, pk=None):
+        """Get all offers for a specific project"""
+        project = self.get_object()
+        offers = project.oferty.all()
+        serializer = OfertaSerializer(offers, many=True)
+        return Response(serializer.data)
+
+class OfertaViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return OfertaCreateSerializer
+        return OfertaSerializer
+
+    def get_queryset(self):
+        queryset = Oferta.objects.all()
+
+        projekt_id = self.request.query_params.get('projekt')
+        if projekt_id:
+            queryset = queryset.filter(projekt_id=projekt_id)
+
+        organizacja_id = self.request.query_params.get('organizacja')
+        if organizacja_id:
+            queryset = queryset.filter(organizacja_id=organizacja_id)
+
+        lokalizacja = self.request.query_params.get('lokalizacja')
+        if lokalizacja:
+            queryset = queryset.filter(lokalizacja__icontains=lokalizacja)
+
+        tematyka = self.request.query_params.get('tematyka')
+        if tematyka:
+            queryset = queryset.filter(tematyka__icontains=tematyka)
+
+        # New filter for duration
+        czas_trwania = self.request.query_params.get('czas_trwania')
+        if czas_trwania:
+            queryset = queryset.filter(czas_trwania__icontains=czas_trwania)
+
+        # Filter for open offers (with no assigned volunteer)
+        tylko_wolne = self.request.query_params.get('tylko_wolne')
+        if tylko_wolne and tylko_wolne.lower() == 'true':
+            queryset = queryset.filter(wolontariusz__isnull=True)
+
+        # Filter by requirements (search in requirements text)
+        wymagania = self.request.query_params.get('wymagania')
+        if wymagania:
+            queryset = queryset.filter(wymagania__icontains=wymagania)
+
+        # Add search across multiple fields
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(tytul_oferty__icontains=search) |
+                Q(lokalizacja__icontains=search) |
+                Q(tematyka__icontains=search) |
+                Q(wymagania__icontains=search)
+            )
+
+            # Only offers with no assigned volunteers via Zlecenie
+            queryset = queryset.filter(~Q(zlecenia__wolontariusz__isnull=False))
+
+        # Filter by completion only when explicitly requested.
+        # This avoids breaking detail actions (e.g., certificates for completed offers).
+        completed = self.request.query_params.get('completed')
+        if completed is not None:
+            if completed.lower() == 'true':
+                queryset = queryset.filter(czy_ukonczone=True)
+            else:
+                queryset = queryset.filter(czy_ukonczone=False)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        if self.request.user.rola in ['organizacja', 'koordynator'] and self.request.user.organizacja:
+            serializer.save(organizacja=self.request.user.organizacja)
+        else:
+            raise serializers.ValidationError({"error": "Only organization and coordinator users can create offers"})
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def apply(self, request, pk=None):
+        """Apply for an offer (volunteers only)"""
+        offer = self.get_object()
+
+        if request.user.rola != 'wolontariusz':
+            return Response(
+                {'error': 'Only volunteers can apply for offers'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if offer.czy_ukonczone:
+            return Response(
+                {'error': 'This offer is already completed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Add user to Zlecenie (create if needed)
+        from wolontariat.models import Zlecenie
+        zlecenie, _ = Zlecenie.objects.get_or_create(oferta=offer)
+        if zlecenie.wolontariusz.filter(id=request.user.id).exists():
+            return Response({'message': 'Already applied'}, status=status.HTTP_200_OK)
+        zlecenie.wolontariusz.add(request.user)
+
+        serializer = OfertaSerializer(offer)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def certificate(self, request, pk=None):
+        """Generate a per-offer PDF certificate (volunteers only).
+
+        Conditions:
+        - requester role must be 'wolontariusz'
+        - offer must be completed (czy_ukonczone=True)
+        - requester must be assigned to the offer
+          (either as Oferta.wolontariusz or via Zlecenie participation)
+        """
+        offer = self.get_object()
+
+        if request.user.rola != 'wolontariusz':
+            return Response({'error': 'Only volunteers can download certificates'}, status=status.HTTP_403_FORBIDDEN)
+
+        if not offer.czy_ukonczone:
+            return Response({'error': 'Certificate available after completion'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate assignment: allow either direct FK assignment or Zlecenie participation
+        assigned_direct = (offer.wolontariusz_id == request.user.id)
+        assigned_via_zlecenie = offer.zlecenia.filter(wolontariusz=request.user).exists()
+        if not (assigned_direct or assigned_via_zlecenie):
+            return Response({'error': 'You are not assigned to this offer'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Generate a simple PDF using standard fonts
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+
+        regular_font, bold_font = get_pl_font_names()
+        pdf.setFont(bold_font, 20)
+        pdf.drawCentredString(width / 2, height - 100, 'Zaświadczenie ukończenia')
+
+        pdf.setFont(regular_font, 14)
+        pdf.drawString(100, height - 150, f"Wolontariusz: {request.user.get_full_name() or request.user.username}")
+        pdf.drawString(100, height - 170, f"E-mail: {request.user.email}")
+
+        pdf.drawString(100, height - 200, 'Szczegóły oferty:')
+        pdf.drawString(120, height - 220, f"Tytuł: {offer.tytul_oferty}")
+        pdf.drawString(120, height - 240, f"Projekt: {offer.projekt.nazwa_projektu}")
+        pdf.drawString(120, height - 260, f"Organizacja: {offer.organizacja.nazwa_organizacji}")
+
+        pdf.showPage()
+        pdf.save()
+        buffer.seek(0)
+
+        resp = HttpResponse(buffer.read(), content_type='application/pdf')
+        safe_title = ''.join(ch for ch in offer.tytul_oferty if ch.isalnum() or ch in (' ', '-', '_')).strip().replace(' ', '_')
+        filename = f"zaswiadczenie_oferta_{offer.id}_{safe_title or 'oferta'}.pdf"
+        resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def approve(self, request, pk=None):
+        """Approve a volunteer for an offer (organization/coordinator only)"""
+        offer = self.get_object()
+
+        if request.user.rola not in ['organizacja', 'koordynator']:
+            return Response(
+                {'error': 'Only organizations and coordinators can approve volunteers'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if request.user.rola == 'organizacja' and offer.organizacja != request.user.organizacja:
+            return Response(
+                {'error': 'You can only approve volunteers for your organization offers'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not offer.wolontariusz:
+            return Response(
+                {'error': 'No volunteer to approve for this offer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        offer.czy_ukonczone = True
+        offer.save()
+
+        serializer = OfertaSerializer(offer)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def assign(self, request, pk=None):
+        """Assign a volunteer to an offer (organization/coordinator only)"""
+        offer = self.get_object()
+
+        if request.user.rola not in ['organizacja', 'koordynator']:
+            return Response(
+                {'error': 'Only organizations and coordinators can assign volunteers'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if request.user.rola == 'organizacja' and offer.organizacja != request.user.organizacja:
+            return Response(
+                {'error': 'You can only assign volunteers for your organization offers'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        wolontariusz_id = request.data.get('wolontariusz_id')
+        if not wolontariusz_id:
+            return Response({'error': 'wolontariusz_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = Uzytkownik.objects.get(id=wolontariusz_id, rola='wolontariusz')
+        except Uzytkownik.DoesNotExist:
+            return Response({'error': 'Volunteer not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        from wolontariat.models import Zlecenie
+        zlecenie, _ = Zlecenie.objects.get_or_create(oferta=offer)
+        zlecenie.wolontariusz.add(user)
+
+        serializer = OfertaSerializer(offer)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def withdraw(self, request, pk=None):
+        """Withdraw application from an offer (volunteer only)"""
+        offer = self.get_object()
+
+        if request.user.rola != 'wolontariusz':
+            return Response({'error': 'Only volunteers can withdraw'}, status=status.HTTP_403_FORBIDDEN)
+
+        from wolontariat.models import Zlecenie
+        qs = offer.zlecenia.filter(wolontariusz=request.user)
+        if not qs.exists():
+            return Response({'error': 'You are not assigned to this offer'}, status=status.HTTP_400_BAD_REQUEST)
+        for z in qs:
+            z.wolontariusz.remove(request.user)
+        offer.czy_ukonczone = False
+        offer.save(update_fields=['czy_ukonczone'])
+
+        serializer = OfertaSerializer(offer)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def my_offers(self, request):
+        """Get offers related to current user"""
+        if request.user.rola == 'wolontariusz':
+            offers = Oferta.objects.filter(zlecenia__wolontariusz=request.user).distinct()
+        elif request.user.rola == 'organizacja' and request.user.organizacja:
+            offers = Oferta.objects.filter(organizacja=request.user.organizacja)
+        else:
+            offers = Oferta.objects.none()
+
+        serializer = OfertaSerializer(offers, many=True)
+        return Response(serializer.data)
