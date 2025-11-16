@@ -425,3 +425,114 @@ class OrganizacjaViewSet(viewsets.ReadOnlyModelViewSet):
         projects = organization.projekty.all()
         serializer = ProjektSerializer(projects, many=True)
         return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register(request):
+    """
+    User registration endpoint
+    """
+    required_fields = ['username', 'email', 'password', 'rola', 'nr_telefonu']
+
+    for field in required_fields:
+        if field not in request.data:
+            return Response(
+                {'error': f'Missing required field: {field}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    if Uzytkownik.objects.filter(username=request.data['username']).exists():
+        return Response(
+            {'error': 'Username already exists'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if Uzytkownik.objects.filter(email=request.data['email']).exists():
+        return Response(
+            {'error': 'Email already exists'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Additional validation for volunteers: require wiek
+    rola = request.data.get('rola')
+    if rola == 'wolontariusz':
+        if 'wiek' not in request.data:
+            return Response({'error': 'Missing required field: wiek'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            wiek_val = int(request.data.get('wiek'))
+            if wiek_val < 0 or wiek_val > 120:
+                return Response({'error': 'Wiek musi być liczbą w zakresie 0-120'}, status=status.HTTP_400_BAD_REQUEST)
+        except (TypeError, ValueError):
+            return Response({'error': 'Wiek musi być liczbą całkowitą'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = Uzytkownik.objects.create_user(
+            username=request.data['username'],
+            email=request.data['email'],
+            password=request.data['password'],
+            rola=request.data['rola'],
+            nr_telefonu=request.data['nr_telefonu'],
+            wiek=request.data.get('wiek', None),
+            first_name=request.data.get('first_name', ''),
+            last_name=request.data.get('last_name', ''),
+        )
+
+        # Optionally attach organization for organization/coordinator accounts
+        if 'organizacja_id' in request.data and request.data['rola'] in ['organizacja', 'koordynator']:
+            user.organizacja_id = request.data['organizacja_id']
+            user.save()
+
+        token, created = Token.objects.get_or_create(user=user)
+
+        return Response({
+            'user': UzytkownikSerializer(user).data,
+            'token': token.key,
+            'message': 'User created successfully'
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+    """
+    User login endpoint
+    """
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    if not username or not password:
+        return Response(
+            {'error': 'Please provide both username and password'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    user = authenticate(username=username, password=password)
+
+    if user:
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({
+            'user': UzytkownikSerializer(user).data,
+            'token': token.key
+        })
+    else:
+        return Response(
+            {'error': 'Invalid credentials'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def logout(request):
+    """
+    User logout endpoint
+    """
+    if request.auth:
+        request.auth.delete()
+
+    return Response({'message': 'Successfully logged out'})
