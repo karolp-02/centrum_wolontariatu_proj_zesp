@@ -10,10 +10,11 @@ from django.http import HttpResponse
 from django.core.files import File
 from django.conf import settings
 
-from wolontariat.models import Projekt, Oferta
+from wolontariat.models import Projekt, Oferta, Uzytkownik, Organizacja
 from django.http import HttpResponse
 from .serializers import (
     ProjektSerializer, OfertaSerializer, OfertaCreateSerializer,
+    UzytkownikSerializer, OrganizacjaSerializer,
 )
 from .permissions import IsOrganization, IsOwnerOrReadOnly
 import os
@@ -303,4 +304,124 @@ class OfertaViewSet(viewsets.ModelViewSet):
             offers = Oferta.objects.none()
 
         serializer = OfertaSerializer(offers, many=True)
+        return Response(serializer.data)
+
+class UzytkownikViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = UzytkownikSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.rola in ['organizacja', 'koordynator']:
+            return Uzytkownik.objects.filter(rola='wolontariusz')
+        return Uzytkownik.objects.filter(id=self.request.user.id)
+
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """Get current user profile"""
+        serializer = UzytkownikSerializer(request.user)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def volunteers(self, request):
+        """Get all volunteers (for organizations/coordinators)"""
+        if request.user.rola not in ['organizacja', 'koordynator']:
+            return Response(
+                {'error': 'Only organizations and coordinators can view all volunteers'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        volunteers = Uzytkownik.objects.filter(rola='wolontariusz')
+        serializer = UzytkownikSerializer(volunteers, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def certificate(self, request, pk=None):
+        """
+        Generate and download a certificate for the volunteer's completed offers
+        """
+        user = self.get_object()
+
+        # Check if the requesting user is authorized to access this certificate
+        if request.user != user and request.user.rola not in ['organizacja', 'koordynator']:
+            return Response(
+                {'error': 'You are not authorized to view this certificate'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if the user is a volunteer
+        if user.rola != 'wolontariusz':
+            return Response(
+                {'error': 'Certificates are only available for volunteers'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if the volunteer has any completed assignments
+        if not user.zlecenia.filter(czy_ukonczone=True).exists():
+            return Response(
+                {'error': 'This volunteer has no completed assignments'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Generate the certificate PDF
+            pdf_file = user.certyfikat_gen()
+
+            # Create the HTTP response with PDF content
+            response = HttpResponse(pdf_file, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="certificate_{user.username}.pdf"'
+            return response
+
+        except Exception as e:
+            return Response(
+                {'error': f'Error generating certificate: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def my_certificate(self, request):
+        """
+        Generate and download certificate for the current user
+        """
+        user = request.user
+
+        # Check if the user is a volunteer
+        if user.rola != 'wolontariusz':
+            return Response(
+                {'error': 'Certificates are only available for volunteers'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if the volunteer has any completed assignments
+        if not user.zlecenia.filter(czy_ukonczone=True).exists():
+            return Response(
+                {'error': 'You have no completed assignments yet'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Generate the certificate PDF
+            pdf_file = user.certyfikat_gen()
+
+            # Create the HTTP response with PDF content
+            response = HttpResponse(pdf_file, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="certificate_{user.username}.pdf"'
+            return response
+
+        except Exception as e:
+            return Response(
+                {'error': f'Error generating certificate: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class OrganizacjaViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = OrganizacjaSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    queryset = Organizacja.objects.filter(weryfikacja=True)
+
+    @action(detail=True, methods=['get'])
+    def projekty(self, request, pk=None):
+        """Get all projects for a specific organization"""
+        organization = self.get_object()
+        projects = organization.projekty.all()
+        serializer = ProjektSerializer(projects, many=True)
         return Response(serializer.data)
