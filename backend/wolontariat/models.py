@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.core.validators import RegexValidator
 from django.utils import timezone
 from reportlab.lib.pagesizes import A4
@@ -39,13 +39,32 @@ class Uzytkownik(AbstractUser):
 
     nr_telefonu = models.CharField(max_length=9, validators=[telefon_validator], help_text="Podaj numer telefonu składający się tylko z 9 cyfr")
     wiek = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Wiek (lata). Używane do rozróżniania małoletnich/pełnoletnich wolontariuszy")
-    organizacja = models.ForeignKey(Organizacja, on_delete=models.SET_NULL, null=True, blank=True, related_name='uzytkownicy')
+    organizacja = models.ForeignKey('Organizacja', on_delete=models.SET_NULL, null=True, blank=True, related_name='uzytkownicy')
+
     ROLE_TYPE = [
         ('wolontariusz', 'Wolontariusz'),
         ('koordynator', 'Koordynator'),
         ('organizacja', 'Organizacja'),
     ]
     rola = models.CharField(max_length=20, choices=ROLE_TYPE)
+
+    # Fix the conflicting fields
+    groups = models.ManyToManyField(
+        'auth.Group',
+        verbose_name='groups',
+        blank=True,
+        help_text='The groups this user belongs to.',
+        related_name='uzytkownik_set',
+        related_query_name='uzytkownik',
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        verbose_name='user permissions',
+        blank=True,
+        help_text='Specific permissions for this user.',
+        related_name='uzytkownik_set',
+        related_query_name='uzytkownik',
+    )
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
@@ -104,7 +123,7 @@ class Oferta(models.Model):
     tematyka = models.CharField(max_length=100, blank=True, help_text="Główna tematyka oferty (np. edukacja, pomoc seniorom)")
     czas_trwania = models.CharField(max_length=50, blank=True, help_text="Przewidywany czas trwania (np. 2 godziny, 3 dni)")
     wymagania = models.TextField(blank=True, help_text="Wymagania dla wolontariuszy")
-    
+
 
     def __str__(self):
         return self.tytul_oferty

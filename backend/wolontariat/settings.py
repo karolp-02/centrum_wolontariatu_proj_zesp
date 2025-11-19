@@ -30,7 +30,6 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
     'rest_framework',
     'wolontariat',
     'api',
@@ -69,7 +68,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'wolontariat.wsgi.application'
 
-
+AUTH_USER_MODEL = 'wolontariat.Uzytkownik'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 

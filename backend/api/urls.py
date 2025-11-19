@@ -19,5 +19,5 @@ urlpatterns = [
 
 
     # Keep DRF's built-in session auth for admin
-    path('auth/', include('rest_framework.urls')),
+    # path('auth/', include('rest_framework.urls')),
 ]
