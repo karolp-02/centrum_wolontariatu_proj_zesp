@@ -4,6 +4,7 @@ from django.core.validators import RegexValidator
 from django.utils import timezone
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from .pdf_utils import get_pl_font_names
 from io import BytesIO
 from django.core.files.base import ContentFile
 

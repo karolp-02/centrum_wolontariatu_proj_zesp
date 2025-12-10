@@ -9,7 +9,10 @@ from django.contrib.auth import authenticate
 from django.http import HttpResponse
 from django.core.files import File
 from django.conf import settings
-
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from wolontariat.pdf_utils import get_pl_font_names
 from wolontariat.models import Projekt, Oferta, Uzytkownik, Organizacja, Recenzja
 from django.http import HttpResponse
 from .serializers import (
@@ -566,3 +569,20 @@ def logout(request):
         request.auth.delete()
 
     return Response({'message': 'Successfully logged out'})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def certificate(request):
+    """
+    Generate and download a PDF certificate for the current user
+    based on completed assignments.
+    """
+    user: Uzytkownik = request.user  # type: ignore
+    try:
+        content_file = user.certyfikat_gen()
+        resp = HttpResponse(content_file.read(), content_type='application/pdf')
+        filename = f"zaswiadczenie_{user.username}.pdf"
+        resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
