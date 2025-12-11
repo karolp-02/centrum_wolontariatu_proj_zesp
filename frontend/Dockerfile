@@ -14,5 +14,5 @@ FROM base AS prod
 COPY . .
 RUN npm run build
 RUN npm install -g serve
-CMD ["serve", "-s", "build", "-l", "3000"]
+CMD ["serve", "-s", "dist", "-l", "3000"]
 
