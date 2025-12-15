@@ -1,18 +1,34 @@
-# Base stage for dependencies
-FROM node:18 AS base
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
+# Common base with build args
+FROM node:18-alpine as base
 
-# Dev stage
-FROM base AS dev
+WORKDIR /app
+
+# Build arguments
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
+
+# Copy package files
+COPY package*.json ./
+
+EXPOSE 3000
+
+# Development stage
+FROM base as dev
+ARG NODE_ENV=development
+ENV NODE_ENV=${NODE_ENV}
+
+RUN npm install --frozen-lockfile
+
 COPY . .
+
 CMD ["npm", "run", "dev"]
 
-# Prod stage
-FROM base AS prod
+# Production build stage
+FROM base as production
+
+RUN npm ci --only=production
+
 COPY . .
 RUN npm run build
-RUN npm install -g serve
-CMD ["serve", "-s", "dist", "-l", "3000"]
 
+CMD ["npm", "run", "preview"]
