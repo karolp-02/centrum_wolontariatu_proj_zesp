@@ -1,5 +1,5 @@
 // --- RoleType ---
-type RoleType = 'wolontariusz' | 'koordynator' | 'organizacja';
+type RoleType = "wolontariusz" | "koordynator" | "organizacja";
 
 // --- Organizacja ---
 type Organizacja = {
@@ -30,6 +30,8 @@ type Uzytkownik = {
   is_active?: boolean;
   is_staff?: boolean;
   date_joined?: string; // ISO date string
+  czy_potwierdzone?: boolean; // Has the organization accepted their application?
+  czy_ukonczone?: boolean; // Have they finished the work?
   // related fields:
   oferty?: Oferta[];
   wyslane_wiadomosci?: Wiadomosc[];

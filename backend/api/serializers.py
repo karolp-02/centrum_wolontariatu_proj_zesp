@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from wolontariat.models import Projekt, Oferta, Uzytkownik, Organizacja, Recenzja
+from wolontariat.models import Projekt, Oferta, Uzytkownik, Organizacja, Recenzja, Zlecenie
 
 class OrganizacjaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -8,9 +8,7 @@ class OrganizacjaSerializer(serializers.ModelSerializer):
         fields = ['id', 'nazwa_organizacji', 'nr_telefonu', 'nip', 'weryfikacja']
 
 class UzytkownikSerializer(serializers.ModelSerializer):
-    # Return nested organization object for reads
     organizacja = OrganizacjaSerializer(read_only=True)
-    # Allow setting by ID where applicable (write-only alias)
     organizacja_id = serializers.PrimaryKeyRelatedField(
         source='organizacja', queryset=Organizacja.objects.all(), write_only=True, required=False
     )
@@ -53,33 +51,35 @@ class OfertaSerializer(serializers.ModelSerializer):
         model = Oferta
         fields = [
             'id', 'organizacja', 'organizacja_nazwa', 'projekt', 'projekt_nazwa',
-            'tytul_oferty', 'lokalizacja', 'tematyka', 'czas_trwania', 'wymagania',  # Added new fields
+            'tytul_oferty', 'lokalizacja', 'tematyka', 'czas_trwania', 'wymagania',
             'data',
             'data_wyslania', 'wolontariusz', 'wolontariusz_info',
             'wolontariusze', 'liczba_uczestnikow', 'czy_ukonczone'
         ]
         read_only_fields = ['organizacja', 'data_wyslania']
 
-
-    # Helpers for multi-assignment via Zlecenie
     def get_wolontariusze(self, obj):
-        from wolontariat.models import Uzytkownik
-        qs = Uzytkownik.objects.filter(zlecenia__oferta=obj).distinct()
-        return UzytkownikSerializer(qs, many=True).data
+        # Fetch volunteers with their specific Zlecenie status
+        zlecenia = Zlecenie.objects.filter(oferta=obj).select_related('wolontariusz')
+        results = []
+        for z in zlecenia:
+            user_data = UzytkownikSerializer(z.wolontariusz).data
+            user_data['czy_potwierdzone'] = z.czy_potwierdzone
+            user_data['czy_ukonczone'] = z.czy_ukonczone
+            results.append(user_data)
+        return results
 
     def get_liczba_uczestnikow(self, obj):
-        from wolontariat.models import Uzytkownik
-        return Uzytkownik.objects.filter(zlecenia__oferta=obj).distinct().count()
+        return Zlecenie.objects.filter(oferta=obj).count()
 
 class OfertaCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Oferta
         fields = [
             'projekt', 'tytul_oferty', 'lokalizacja',
-            'tematyka', 'czas_trwania', 'wymagania', 'data',  # Added new fields
+            'tematyka', 'czas_trwania', 'wymagania', 'data',
             'data_wyslania'
         ]
-    pass
 
 class RegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
@@ -125,46 +125,68 @@ class RecenzjaCreateSerializer(serializers.ModelSerializer):
     def validate(self, data):
         request = self.context.get('request')
         user = request.user
-        # must be organization
+
+        # 1. Check Permissions
         if not user or getattr(user, 'rola', None) != 'organizacja':
             raise serializers.ValidationError("Tylko organizacje mogą wystawiać recenzje.")
 
         oferta = data.get('oferta', None)
-        if oferta:
-            # check oferta belongs to this org
-            if oferta.organizacja != user.organizacja:
-                raise serializers.ValidationError("Ta oferta nie należy do Twojej organizacji.")
-            # check that offer is completed/approved
-            if not oferta.czy_ukonczone:
-                raise serializers.ValidationError("Można ocenić wolontariusza tylko po zakończeniu oferty.")
-            # Resolve volunteer: prefer explicit, then oferta.wolontariusz, else single Zlecenie participant
-            explicit_vol = data.get('wolontariusz')
-            if explicit_vol is not None:
-                from wolontariat_krakow.models import Uzytkownik as UZ
-                # ensure explicit_vol participates in this oferta via Zlecenie or is oferta.wolontariusz
-                participates = UZ.objects.filter(id=explicit_vol.id, zlecenia__oferta=oferta).exists() or (oferta.wolontariusz_id == explicit_vol.id)
-                if not participates:
-                    raise serializers.ValidationError("Podany wolontariusz nie jest uczestnikiem tej oferty.")
-                data['wolontariusz'] = explicit_vol
-            else:
-                if oferta.wolontariusz:
-                    data['wolontariusz'] = oferta.wolontariusz
-                else:
-                    from wolontariat_krakow.models import Uzytkownik as UZ
-                    participants = list(UZ.objects.filter(zlecenia__oferta=oferta).distinct())
-                    if len(participants) == 1:
-                        data['wolontariusz'] = participants[0]
-                    elif len(participants) == 0:
-                        raise serializers.ValidationError("Brak uczestników dla tej oferty.")
-                    else:
-                        raise serializers.ValidationError("Wskaż wolontariusza, którego oceniasz (pole 'wolontariusz').")
-            # prevent duplicate review for same oferta by same organization (if desired)
-            if Recenzja.objects.filter(oferta=oferta, organizacja=user.organizacja).exists():
-                raise serializers.ValidationError("Recenzja dla tej oferty już istnieje.")
+        if not oferta:
+             raise serializers.ValidationError("Musisz podać 'oferta' aby ocenić wolontariusza.")
+
+        # 2. Check Ownership
+        if oferta.organizacja != user.organizacja:
+            raise serializers.ValidationError("Ta oferta nie należy do Twojej organizacji.")
+
+        # 3. Determine Volunteer (Explicit or Implicit)
+        target_volunteer = None
+        explicit_vol = data.get('wolontariusz')
+
+        if explicit_vol:
+             # Check if this volunteer is actually assigned to the offer
+             # Use the correct model import here:
+             from wolontariat.models import Zlecenie
+             if not Zlecenie.objects.filter(oferta=oferta, wolontariusz=explicit_vol).exists():
+                 # Fallback for legacy data (direct assignment)
+                 if oferta.wolontariusz_id != explicit_vol.id:
+                     raise serializers.ValidationError("Podany wolontariusz nie jest uczestnikiem tej oferty.")
+             target_volunteer = explicit_vol
+             data['wolontariusz'] = explicit_vol
         else:
-            # if no oferta provided, require wolontariusz id in context or explicit param?
-            # For safety, enforce oferta must be provided
-            raise serializers.ValidationError("Musisz podać 'oferta' aby ocenić wolontariusza.")
+             # Try to deduce volunteer
+             if oferta.wolontariusz:
+                 target_volunteer = oferta.wolontariusz
+             else:
+                 from wolontariat.models import Zlecenie
+                 zlecenia = Zlecenie.objects.filter(oferta=oferta)
+                 if zlecenia.count() == 1:
+                     target_volunteer = zlecenia.first().wolontariusz
+                 elif zlecenia.count() == 0:
+                     raise serializers.ValidationError("Brak uczestników dla tej oferty.")
+                 else:
+                     raise serializers.ValidationError("W ofercie bierze udział wielu wolontariuszy. Wskaż konkretnego wolontariusza (pole 'wolontariusz').")
+             data['wolontariusz'] = target_volunteer
+
+        # 4. Check Completion Status (Volunteer-Specific)
+        # We check if THIS volunteer has finished the work (Zlecenie.czy_ukonczone=True)
+        # OR if the offer is globally closed (legacy support)
+        from wolontariat.models import Zlecenie
+        is_completed = False
+
+        # Check specific Zlecenie
+        if Zlecenie.objects.filter(oferta=oferta, wolontariusz=target_volunteer, czy_ukonczone=True).exists():
+            is_completed = True
+        # Check global flag
+        elif oferta.czy_ukonczone:
+            is_completed = True
+
+        if not is_completed:
+             raise serializers.ValidationError("Można ocenić wolontariusza tylko po zakończeniu jego wolontariatu (zatwierdzeniu ukończenia).")
+
+        # 5. Check Duplicates
+        if Recenzja.objects.filter(oferta=oferta, organizacja=user.organizacja, wolontariusz=target_volunteer).exists():
+            raise serializers.ValidationError("Recenzja dla tego wolontariusza w tej ofercie już istnieje.")
+
         return data
 
     def create(self, validated_data):

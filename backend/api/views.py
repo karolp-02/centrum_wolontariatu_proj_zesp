@@ -3,25 +3,20 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.authtoken.models import Token
-from rest_framework.response import Response
 from django.db.models import Q
 from django.contrib.auth import authenticate
 from django.http import HttpResponse
-from django.core.files import File
-from django.conf import settings
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from wolontariat.pdf_utils import get_pl_font_names
-from wolontariat.models import Projekt, Oferta, Uzytkownik, Organizacja, Recenzja
-from django.http import HttpResponse
+from wolontariat.models import Projekt, Oferta, Uzytkownik, Organizacja, Recenzja, Zlecenie
 from .serializers import (
     ProjektSerializer, OfertaSerializer, OfertaCreateSerializer,
     UzytkownikSerializer, OrganizacjaSerializer,
     RecenzjaSerializer, RecenzjaCreateSerializer
 )
 from .permissions import IsOrganization, IsOwnerOrReadOnly
-import os
 
 
 
@@ -91,22 +86,18 @@ class OfertaViewSet(viewsets.ModelViewSet):
         if tematyka:
             queryset = queryset.filter(tematyka__icontains=tematyka)
 
-        # New filter for duration
         czas_trwania = self.request.query_params.get('czas_trwania')
         if czas_trwania:
             queryset = queryset.filter(czas_trwania__icontains=czas_trwania)
 
-        # Filter for open offers (with no assigned volunteer)
         tylko_wolne = self.request.query_params.get('tylko_wolne')
         if tylko_wolne and tylko_wolne.lower() == 'true':
-            queryset = queryset.filter(wolontariusz__isnull=True)
+            queryset = queryset.filter(zlecenia__isnull=True)
 
-        # Filter by requirements (search in requirements text)
         wymagania = self.request.query_params.get('wymagania')
         if wymagania:
             queryset = queryset.filter(wymagania__icontains=wymagania)
 
-        # Add search across multiple fields
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
@@ -116,11 +107,6 @@ class OfertaViewSet(viewsets.ModelViewSet):
                 Q(wymagania__icontains=search)
             )
 
-            # Only offers with no assigned volunteers via Zlecenie
-            queryset = queryset.filter(~Q(zlecenia__wolontariusz__isnull=False))
-
-        # Filter by completion only when explicitly requested.
-        # This avoids breaking detail actions (e.g., certificates for completed offers).
         completed = self.request.query_params.get('completed')
         if completed is not None:
             if completed.lower() == 'true':
@@ -134,7 +120,7 @@ class OfertaViewSet(viewsets.ModelViewSet):
         if self.request.user.rola in ['organizacja', 'koordynator'] and self.request.user.organizacja:
             serializer.save(organizacja=self.request.user.organizacja)
         else:
-            raise serializers.ValidationError({"error": "Only organization and coordinator users can create offers"})
+            raise serializers.ValidationError({"error": "Only organization users can create offers"})
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def apply(self, request, pk=None):
@@ -142,173 +128,106 @@ class OfertaViewSet(viewsets.ModelViewSet):
         offer = self.get_object()
 
         if request.user.rola != 'wolontariusz':
-            return Response(
-                {'error': 'Only volunteers can apply for offers'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({'error': 'Only volunteers can apply'}, status=status.HTTP_403_FORBIDDEN)
 
         if offer.czy_ukonczone:
-            return Response(
-                {'error': 'This offer is already completed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Offer is closed'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Add user to Zlecenie (create if needed)
-        from wolontariat.models import Zlecenie
-        zlecenie, _ = Zlecenie.objects.get_or_create(oferta=offer)
-        if zlecenie.wolontariusz.filter(id=request.user.id).exists():
-            return Response({'message': 'Already applied'}, status=status.HTTP_200_OK)
-        zlecenie.wolontariusz.add(request.user)
+        # Create Zlecenie with default status
+        zlecenie, created = Zlecenie.objects.get_or_create(oferta=offer, wolontariusz=request.user)
 
-        serializer = OfertaSerializer(offer)
-        return Response(serializer.data)
+        if not created:
+             return Response({'message': 'Already applied'}, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
-    def certificate(self, request, pk=None):
-        """Generate a per-offer PDF certificate (volunteers only).
-
-        Conditions:
-        - requester role must be 'wolontariusz'
-        - offer must be completed (czy_ukonczone=True)
-        - requester must be assigned to the offer
-          (either as Oferta.wolontariusz or via Zlecenie participation)
-        """
-        offer = self.get_object()
-
-        if request.user.rola != 'wolontariusz':
-            return Response({'error': 'Only volunteers can download certificates'}, status=status.HTTP_403_FORBIDDEN)
-
-        if not offer.czy_ukonczone:
-            return Response({'error': 'Certificate available after completion'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate assignment: allow either direct FK assignment or Zlecenie participation
-        assigned_direct = (offer.wolontariusz_id == request.user.id)
-        assigned_via_zlecenie = offer.zlecenia.filter(wolontariusz=request.user).exists()
-        if not (assigned_direct or assigned_via_zlecenie):
-            return Response({'error': 'You are not assigned to this offer'}, status=status.HTTP_403_FORBIDDEN)
-
-        # Generate a simple PDF using standard fonts
-        buffer = BytesIO()
-        pdf = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-
-        regular_font, bold_font = get_pl_font_names()
-        pdf.setFont(bold_font, 20)
-        pdf.drawCentredString(width / 2, height - 100, 'Zaświadczenie ukończenia')
-
-        pdf.setFont(regular_font, 14)
-        pdf.drawString(100, height - 150, f"Wolontariusz: {request.user.get_full_name() or request.user.username}")
-        pdf.drawString(100, height - 170, f"E-mail: {request.user.email}")
-
-        pdf.drawString(100, height - 200, 'Szczegóły oferty:')
-        pdf.drawString(120, height - 220, f"Tytuł: {offer.tytul_oferty}")
-        pdf.drawString(120, height - 240, f"Projekt: {offer.projekt.nazwa_projektu}")
-        pdf.drawString(120, height - 260, f"Organizacja: {offer.organizacja.nazwa_organizacji}")
-
-        pdf.showPage()
-        pdf.save()
-        buffer.seek(0)
-
-        resp = HttpResponse(buffer.read(), content_type='application/pdf')
-        safe_title = ''.join(ch for ch in offer.tytul_oferty if ch.isalnum() or ch in (' ', '-', '_')).strip().replace(' ', '_')
-        filename = f"zaswiadczenie_oferta_{offer.id}_{safe_title or 'oferta'}.pdf"
-        resp['Content-Disposition'] = f'attachment; filename="{filename}"'
-        return resp
+        return Response(OfertaSerializer(offer).data)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    def approve(self, request, pk=None):
-        """Approve a volunteer for an offer (organization/coordinator only)"""
+    def confirm_volunteer(self, request, pk=None):
+        """Organization/Coordinator accepts application"""
         offer = self.get_object()
 
+        # Permission Check
         if request.user.rola not in ['organizacja', 'koordynator']:
-            return Response(
-                {'error': 'Only organizations and coordinators can approve volunteers'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
 
+        # RESTRICTION: Only Organizations must own the offer. Coordinators can approve any (simplified).
         if request.user.rola == 'organizacja' and offer.organizacja != request.user.organizacja:
-            return Response(
-                {'error': 'You can only approve volunteers for your organization offers'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+                return Response({'error': 'Not your offer'}, status=status.HTTP_403_FORBIDDEN)
 
-        if not offer.wolontariusz:
-            return Response(
-                {'error': 'No volunteer to approve for this offer'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        offer.czy_ukonczone = True
-        offer.save()
-
-        serializer = OfertaSerializer(offer)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    def assign(self, request, pk=None):
-        """Assign a volunteer to an offer (organization/coordinator only)"""
-        offer = self.get_object()
-
-        if request.user.rola not in ['organizacja', 'koordynator']:
-            return Response(
-                {'error': 'Only organizations and coordinators can assign volunteers'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        if request.user.rola == 'organizacja' and offer.organizacja != request.user.organizacja:
-            return Response(
-                {'error': 'You can only assign volunteers for your organization offers'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        wolontariusz_id = request.data.get('wolontariusz_id')
-        if not wolontariusz_id:
-            return Response({'error': 'wolontariusz_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-
+        vol_id = request.data.get('wolontariusz_id')
         try:
-            user = Uzytkownik.objects.get(id=wolontariusz_id, rola='wolontariusz')
-        except Uzytkownik.DoesNotExist:
-            return Response({'error': 'Volunteer not found'}, status=status.HTTP_404_NOT_FOUND)
+            zlecenie = Zlecenie.objects.get(oferta=offer, wolontariusz_id=vol_id)
+            zlecenie.czy_potwierdzone = True
+            zlecenie.save()
+            return Response(OfertaSerializer(offer).data)
+        except Zlecenie.DoesNotExist:
+            return Response({'error': 'Application not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        from wolontariat.models import Zlecenie
-        zlecenie, _ = Zlecenie.objects.get_or_create(oferta=offer)
-        zlecenie.wolontariusz.add(user)
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def approve_volunteer(self, request, pk=None):
+        """Organization/Coordinator marks work as done"""
+        offer = self.get_object()
 
-        serializer = OfertaSerializer(offer)
-        return Response(serializer.data)
+        # Permission Check
+        if request.user.rola not in ['organizacja', 'koordynator']:
+                return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+        # RESTRICTION: Only Organizations must own the offer. Coordinators can approve any.
+        if request.user.rola == 'organizacja' and offer.organizacja != request.user.organizacja:
+                return Response({'error': 'Not your offer'}, status=status.HTTP_403_FORBIDDEN)
+
+        vol_id = request.data.get('wolontariusz_id')
+        try:
+            zlecenie = Zlecenie.objects.get(oferta=offer, wolontariusz_id=vol_id)
+            zlecenie.czy_ukonczone = True
+            zlecenie.save()
+            return Response(OfertaSerializer(offer).data)
+        except Zlecenie.DoesNotExist:
+            return Response({'error': 'Volunteer not assigned'}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def withdraw(self, request, pk=None):
-        """Withdraw application from an offer (volunteer only)"""
+        """Withdraw application"""
         offer = self.get_object()
+        Zlecenie.objects.filter(oferta=offer, wolontariusz=request.user).delete()
+        return Response(OfertaSerializer(offer).data)
 
-        if request.user.rola != 'wolontariusz':
-            return Response({'error': 'Only volunteers can withdraw'}, status=status.HTTP_403_FORBIDDEN)
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def certificate(self, request, pk=None):
+        offer = self.get_object()
+        has_completed = Zlecenie.objects.filter(oferta=offer, wolontariusz=request.user, czy_ukonczone=True).exists()
 
-        from wolontariat.models import Zlecenie
-        qs = offer.zlecenia.filter(wolontariusz=request.user)
-        if not qs.exists():
-            return Response({'error': 'You are not assigned to this offer'}, status=status.HTTP_400_BAD_REQUEST)
-        for z in qs:
-            z.wolontariusz.remove(request.user)
-        offer.czy_ukonczone = False
-        offer.save(update_fields=['czy_ukonczone'])
+        if not has_completed:
+            return Response({'error': 'You have not completed this offer'}, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = OfertaSerializer(offer)
-        return Response(serializer.data)
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+
+        try:
+            regular_font, bold_font = get_pl_font_names()
+            pdf.setFont(bold_font, 20)
+        except:
+            pdf.setFont("Helvetica-Bold", 20)
+
+        pdf.drawCentredString(A4[0] / 2, A4[1] - 100, "Zaświadczenie")
+        pdf.drawString(100, A4[1] - 150, f"Wolontariusz: {request.user.username}")
+        pdf.drawString(100, A4[1] - 180, f"Ukończył ofertę: {offer.tytul_oferty}")
+        pdf.showPage()
+        pdf.save()
+        buffer.seek(0)
+        resp = HttpResponse(buffer.read(), content_type='application/pdf')
+        resp['Content-Disposition'] = f'attachment; filename="certificate.pdf"'
+        return resp
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def my_offers(self, request):
-        """Get offers related to current user"""
         if request.user.rola == 'wolontariusz':
             offers = Oferta.objects.filter(zlecenia__wolontariusz=request.user).distinct()
-        elif request.user.rola == 'organizacja' and request.user.organizacja:
+        elif request.user.rola in ['organizacja', 'koordynator'] and request.user.organizacja:
             offers = Oferta.objects.filter(organizacja=request.user.organizacja)
         else:
             offers = Oferta.objects.none()
-
-        serializer = OfertaSerializer(offers, many=True)
-        return Response(serializer.data)
+        return Response(OfertaSerializer(offers, many=True).data)
 
 class UzytkownikViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UzytkownikSerializer
@@ -437,10 +356,11 @@ class RecenzjaViewSet(viewsets.ModelViewSet):
     update/destroy: only the org that created the review may change it
     """
     queryset = Recenzja.objects.select_related('organizacja', 'wolontariusz', 'oferta').all()
-    permission_classes = [IsAuthenticatedOrReadOnly := __import__('rest_framework.permissions').permissions.IsAuthenticatedOrReadOnly]  # lazy import to avoid extra top import
+    # Corrected permission assignment
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_permissions(self):
-        if self.action in ['create']:
+        if self.action == 'create':
             return [IsAuthenticated(), IsOrganization()]
         if self.action in ['update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsOwnerOrReadOnly()]
@@ -451,7 +371,6 @@ class RecenzjaViewSet(viewsets.ModelViewSet):
             return RecenzjaCreateSerializer
         return RecenzjaSerializer
 
-    # optionally restrict list to volunteers' profile or pagination/filtering
     def get_queryset(self):
         qs = super().get_queryset()
         # Allow filtering by wolontariusz id via ?wolontariusz=123

@@ -1,17 +1,19 @@
-import api from './axios';
-import { mapOfertaFromApi } from './mappers';
+import api from "./axios";
+import { mapOfertaFromApi } from "./mappers";
 
-export async function getOffers(opts?: { completed?: boolean }): Promise<Oferta[]> {
+export async function getOffers(opts?: {
+  completed?: boolean;
+}): Promise<Oferta[]> {
   const params: Record<string, any> = {};
   const completed = opts?.completed ?? false;
   params.completed = completed;
-  const res = await api.get('offers/', { params });
+  const res = await api.get("offers/", { params });
   const items = Array.isArray(res.data) ? res.data : res.data?.results || [];
   return items.map(mapOfertaFromApi);
 }
 
 export async function getAllOffers(): Promise<Oferta[]> {
-  const res = await api.get('offers/');
+  const res = await api.get("offers/");
   const items = Array.isArray(res.data) ? res.data : res.data?.results || [];
   return items.map(mapOfertaFromApi);
 }
@@ -21,12 +23,40 @@ export async function getOfferById(id: number): Promise<Oferta | undefined> {
   return mapOfertaFromApi(res.data);
 }
 
-export async function applyToOffer(offerId: number, user: Uzytkownik): Promise<Oferta | undefined> {
+// Connects to @action approve
+export async function approveVolunteer(offerId: number): Promise<Oferta> {
+  const res = await api.post(`offers/${offerId}/approve/`);
+  return mapOfertaFromApi(res.data);
+}
+
+export async function confirmVolunteerApplication(
+  offerId: number,
+  volunteerId: number,
+): Promise<Oferta> {
+  const res = await api.post(`offers/${offerId}/confirm_volunteer/`, {
+    wolontariusz_id: volunteerId,
+  });
+  return mapOfertaFromApi(res.data);
+}
+
+export async function approveVolunteerCompletion(
+  offerId: number,
+  volunteerId: number,
+): Promise<Oferta> {
+  const res = await api.post(`offers/${offerId}/approve_volunteer/`, {
+    wolontariusz_id: volunteerId,
+  });
+  return mapOfertaFromApi(res.data);
+}
+
+export async function applyToOffer(
+  offerId: number,
+  user: Uzytkownik,
+): Promise<Oferta | undefined> {
   try {
     const res = await api.post(`offers/${offerId}/apply/`);
     return mapOfertaFromApi(res.data);
   } catch {
-    // Graceful fallback (no-auth dev): fetch and attach mock user locally
     const fresh = await getOfferById(offerId);
     if (!fresh) return undefined;
     if (!fresh.wolontariusz) {
@@ -36,12 +66,14 @@ export async function applyToOffer(offerId: number, user: Uzytkownik): Promise<O
   }
 }
 
-export async function withdrawApplication(offerId: number, user: Uzytkownik): Promise<Oferta | undefined> {
+export async function withdrawApplication(
+  offerId: number,
+  user: Uzytkownik,
+): Promise<Oferta | undefined> {
   try {
     const res = await api.post(`offers/${offerId}/withdraw/`);
     return mapOfertaFromApi(res.data);
   } catch {
-    // Optimistic fallback
     const fresh = await getOfferById(offerId);
     if (!fresh) return undefined;
     if (fresh.wolontariusz && fresh.wolontariusz.id === user.id) {
@@ -52,15 +84,26 @@ export async function withdrawApplication(offerId: number, user: Uzytkownik): Pr
   }
 }
 
-export async function assignVolunteer(offerId: number, volunteerId: number): Promise<Oferta | undefined> {
+export async function assignVolunteer(
+  offerId: number,
+  volunteerId: number,
+): Promise<Oferta | undefined> {
   try {
-    const res = await api.post(`offers/${offerId}/assign/`, { wolontariusz_id: volunteerId });
+    const res = await api.post(`offers/${offerId}/assign/`, {
+      wolontariusz_id: volunteerId,
+    });
     return mapOfertaFromApi(res.data);
   } catch {
-    // Optimistic fallback
     const fresh = await getOfferById(offerId);
     if (!fresh) return undefined;
-    fresh.wolontariusz = { id: volunteerId, username: '', email: '', nr_telefonu: '', organizacja: null, rola: 'wolontariusz' } as Uzytkownik;
+    fresh.wolontariusz = {
+      id: volunteerId,
+      username: "",
+      email: "",
+      nr_telefonu: "",
+      organizacja: null,
+      rola: "wolontariusz",
+    } as Uzytkownik;
     return fresh;
   }
 }
@@ -69,12 +112,12 @@ export async function createOffer(data: {
   projekt: number;
   tytul_oferty: string;
   lokalizacja: string;
-  data?: string; // RRRR-MM-DD
+  data?: string;
   tematyka?: string;
   czas_trwania?: string;
   wymagania?: string;
 }): Promise<Oferta> {
-  const res = await api.post('offers/', data);
+  const res = await api.post("offers/", data);
   return mapOfertaFromApi(res.data);
 }
 
@@ -84,13 +127,13 @@ export async function updateOffer(
     projekt: number;
     tytul_oferty: string;
     lokalizacja: string;
-    data: string; // RRRR-MM-DD
+    data: string;
     tematyka: string;
     czas_trwania: string;
     wymagania: string;
     wolontariusz: number | null;
     czy_ukonczone: boolean;
-  }>
+  }>,
 ): Promise<Oferta> {
   const res = await api.patch(`offers/${id}/`, data);
   return mapOfertaFromApi(res.data);
@@ -101,22 +144,24 @@ export async function deleteOffer(id: number): Promise<void> {
 }
 
 export async function getMyOffers(): Promise<Oferta[]> {
-  const res = await api.get('offers/my_offers/');
+  const res = await api.get("offers/my_offers/");
   const items = Array.isArray(res.data) ? res.data : res.data?.results || [];
   return items.map(mapOfertaFromApi);
 }
 
 export async function downloadOfferCertificate(offerId: number): Promise<void> {
-  const res = await api.get(`offers/${offerId}/certificate/`, { responseType: 'blob' });
-  const blob = new Blob([res.data], { type: 'application/pdf' });
-  const disposition = res.headers['content-disposition'] as string | undefined;
+  const res = await api.get(`offers/${offerId}/certificate/`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const disposition = res.headers["content-disposition"] as string | undefined;
   let filename = `zaswiadczenie_oferta_${offerId}.pdf`;
   if (disposition) {
     const match = disposition.match(/filename="?([^";]+)"?/i);
     if (match && match[1]) filename = match[1];
   }
   const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
