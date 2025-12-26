@@ -28,7 +28,7 @@ docker-compose up -d
 Email: jan.kowalski@example.com Hasło: haslo123
 #### Koordynator
 
-Email: anna.nowak@example.com Hasło: haslo123
+Email: anna.nowak@szkola.pl Hasło: haslo123
 #### Organizacja
 
-Email: piotr.zielinski@example.com Hasło: haslo123
+Email: piotr@fundacja.pl Hasło: haslo123

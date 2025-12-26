@@ -1,10 +1,11 @@
-from wolontariat.models import Organizacja, Uzytkownik, Projekt, Oferta, Zlecenie, Wiadomosc
+from wolontariat.models import Organizacja, Uzytkownik, Projekt, Oferta, Zlecenie, Wiadomosc, Recenzja
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
-import random
 from datetime import timedelta
 
 # --- Wyczyść istniejące dane ---
+print("Czyszczenie bazy danych...")
+Recenzja.objects.all().delete()
 Wiadomosc.objects.all().delete()
 Zlecenie.objects.all().delete()
 Oferta.objects.all().delete()
@@ -13,154 +14,140 @@ Uzytkownik.objects.all().delete()
 Organizacja.objects.all().delete()
 
 # --- Organizacje ---
-organizacje_dane = [
-    ("Fundacja Serce dla Zwierząt", "501123456", "1234567890"),
-    ("Stowarzyszenie Zielona Planeta", "502234567", "2345678901"),
-    ("Fundacja Daj Szansę", "503345678", "3456789012"),
-    ("Akcja Pomocy Dzieciom", "504456789", "4567890123"),
-    ("Centrum Wolontariatu Polska", "505567890", "5678901234"),
-]
-
-organizacje = []
-for nazwa, telefon, nip in organizacje_dane:
-    organizacje.append(
-        Organizacja.objects.create(
-            nazwa_organizacji=nazwa,
-            nr_telefonu=telefon,
-            nip=nip
-        )
-    )
-
-print("Dodano 5 organizacji")
+print("Tworzenie organizacji...")
+org_fundacja = Organizacja.objects.create(
+    nazwa_organizacji="Fundacja Serce dla Zwierząt",
+    nr_telefonu="501123456",
+    nip="1234567890",
+    weryfikacja=True
+)
 
 # --- Użytkownicy ---
-uzytkownicy_dane = [
-    ("Jan Kowalski", "jan.kowalski@example.com", "wolontariusz"),
-    ("Anna Nowak", "anna.nowak@example.com", "koordynator"),
-    ("Piotr Zieliński", "piotr.zielinski@example.com", "organizacja"),
-    ("Katarzyna Wiśniewska", "katarzyna.wisniewska@example.com", "wolontariusz"),
-    ("Tomasz Lewandowski", "tomasz.lewandowski@example.com", "koordynator"),
-]
+print("Tworzenie użytkowników...")
 
-uzytkownicy = []
-for imie_nazwisko, email, rola in uzytkownicy_dane:
-    uzytkownicy.append(
-        Uzytkownik.objects.create(
-            username=imie_nazwisko,
-            email=email,
-            nr_telefonu=str(random.randint(600000000, 699999999)),
-            organizacja=random.choice(organizacje),
-            rola=rola,
-            password=make_password("haslo123")
-        )
-    )
+# Organization Admin (Piotr)
+piotr = Uzytkownik.objects.create(
+    username="Piotr Zieliński",
+    email="piotr@fundacja.pl",
+    nr_telefonu="600100100",
+    organizacja=org_fundacja,
+    rola="organizacja",
+    password=make_password("haslo123")
+)
 
-print("Dodano 5 użytkowników")
+# Coordinator (Anna)
+anna = Uzytkownik.objects.create(
+    username="Anna Nowak",
+    email="anna.nowak@szkola.pl",
+    nr_telefonu="600200200",
+    rola="koordynator",
+    password=make_password("haslo123")
+)
+
+# Volunteer 1 (Jan)
+jan = Uzytkownik.objects.create(
+    username="Jan Kowalski",
+    email="jan.kowalski@example.com",
+    nr_telefonu="600300300",
+    rola="wolontariusz",
+    wiek=22,
+    password=make_password("haslo123")
+)
+
+# Volunteer 2 (Kasia)
+kasia = Uzytkownik.objects.create(
+    username="Kasia Wiśniewska",
+    email="kasia.wisniewska@gmail.com",
+    nr_telefonu="600400400",
+    rola="wolontariusz",
+    wiek=17,
+    password=make_password("haslo123")
+)
 
 # --- Projekty ---
-projekty_dane = [
-    "Pomoc zwierzętom w schronisku",
-    "Warsztaty ekologiczne dla młodzieży",
-    "Zbiórka żywności dla potrzebujących",
-    "Sprzątanie terenów zielonych",
-    "Wsparcie dla domów dziecka",
-]
+print("Tworzenie projektu zakończonego...")
+proj_zima = Projekt.objects.create(
+    organizacja=org_fundacja,
+    nazwa_projektu="Zbiórka Zimowa 2024",
+    opis_projektu="Coroczna akcja zbiórki karmy, koców i zabawek dla podopiecznych schroniska przed nadejściem zimy."
+)
 
-projekty = []
-for nazwa in projekty_dane:
-    projekty.append(
-        Projekt.objects.create(
-            organizacja=random.choice(organizacje),
-            nazwa_projektu=nazwa,
-            opis_projektu=f"Projekt '{nazwa}' realizowany przez wolontariuszy w całej Polsce."
-        )
-    )
 
-print("Dodano 5 projektów")
+oferta_sortowanie = Oferta.objects.create(
+    organizacja=org_fundacja,
+    projekt=proj_zima,
+    tytul_oferty="Sortowanie darów w magazynie",
+    lokalizacja="Kraków, Magazyn Centralny",
+    data=timezone.now().date() - timedelta(days=30), # 1 month ago
+    tematyka="Logistyka",
+    czas_trwania="6h",
+    wymagania="Dokładność, umiejętność pracy w zespole.",
+    czy_ukonczone=True, # Offer is closed globally
+    wolontariusz=jan   # Legacy field support
+)
 
-# --- Oferty ---
-oferty_dane = [
-    {
-        "tytul": "Pomoc w schronisku",
-        "tematyka": "Opieka nad zwierzętami",
-        "czas_trwania": "4h w weekend",
-        "wymagania": "Empatia, brak alergii na sierść, punktualność.",
-    },
-    {
-        "tytul": "Warsztaty ekologiczne",
-        "tematyka": "Edukacja ekologiczna",
-        "czas_trwania": "1 dzień",
-        "wymagania": "Komunikatywność, podstawowa wiedza ekologiczna.",
-    },
-    {
-        "tytul": "Zbiórka żywności",
-        "tematyka": "Wsparcie społeczne",
-        "czas_trwania": "2-3h",
-        "wymagania": "Uprzejmość, praca w zespole, dokładność.",
-    },
-    {
-        "tytul": "Sprzątanie lasu",
-        "tematyka": "Ekologia",
-        "czas_trwania": "1/2 dnia",
-        "wymagania": "Sprawność fizyczna, wygodne obuwie, chęć do pracy.",
-    },
-    {
-        "tytul": "Pomoc w domu dziecka",
-        "tematyka": "Wsparcie dzieci",
-        "czas_trwania": "3h tygodniowo",
-        "wymagania": "Cierpliwość, zaświadczenie o niekaralności.",
-    },
-]
+Zlecenie.objects.create(
+    oferta=oferta_sortowanie,
+    wolontariusz=jan,
+    czy_potwierdzone=True, # He was accepted
+    czy_ukonczone=True     # He finished the job
+)
 
-oferty = []
-for item in oferty_dane:
-    losowa_data = timezone.now() - timedelta(days=random.randint(0, 10))
-    oferty.append(
-        Oferta.objects.create(
-            organizacja=random.choice(organizacje),
-            projekt=random.choice(projekty),
-            tytul_oferty=item["tytul"],
-            lokalizacja="Szczecin",
-            data=losowa_data.date(),
-            data_wyslania=losowa_data,
-            tematyka=item["tematyka"],
-            czas_trwania=item["czas_trwania"],
-            wymagania=item["wymagania"],
-        )
-    )
+Recenzja.objects.create(
+    organizacja=org_fundacja,
+    wolontariusz=jan,
+    oferta=oferta_sortowanie,
+    ocena=5,
+    komentarz="Janek to wzorowy wolontariusz! Bardzo sprawnie zorganizował segregację darów. Polecamy!"
+)
 
-print("Dodano 5 ofert")
+print("Tworzenie projektu aktywnego...")
+proj_schronisko = Projekt.objects.create(
+    organizacja=org_fundacja,
+    nazwa_projektu="Wsparcie Schroniska - Wiosna",
+    opis_projektu="Bieżąca pomoc w wyprowadzaniu psów i pracach porządkowych w sezonie wiosennym."
+)
 
-# --- Zlecenia ---
-zlecenia = []
-for oferta in oferty:
-    zlec = Zlecenie.objects.create(
-        oferta=oferta,
-        czy_ukonczone=random.choice([True, False]),
-        czy_potwierdzone=random.choice([True, False])
-    )
-    wolontariusze = [u for u in uzytkownicy if u.rola == 'wolontariusz']
-    zlec.wolontariusz.set(random.sample(wolontariusze, k=random.randint(1, min(2, len(wolontariusze)))))
-    zlecenia.append(zlec)
+oferta_spacery = Oferta.objects.create(
+    organizacja=org_fundacja,
+    projekt=proj_schronisko,
+    tytul_oferty="Weekendowe spacery z psami",
+    lokalizacja="Kraków, Schronisko ul. Rybna",
+    data=timezone.now().date() + timedelta(days=2), # In 2 days
+    tematyka="Opieka nad zwierzętami",
+    czas_trwania="3h",
+    wymagania="Brak alergii, ukończone szkolenie BHP (zapewniamy na miejscu).",
+    czy_ukonczone=False
+)
 
-print("Dodano 5 zleceń")
+Zlecenie.objects.create(
+    oferta=oferta_spacery,
+    wolontariusz=kasia,
+    czy_potwierdzone=True,
+    czy_ukonczone=False
+)
 
-# --- Wiadomości ---
-wiadomosci_dane = [
-    "Dzień dobry! Czy mogę dołączyć do projektu?",
-    "Dziękuję za przesłane informacje o wydarzeniu.",
-    "Czy potrzebne są jeszcze osoby do pomocy?",
-    "Przesyłam raport z zakończonej akcji.",
-    "Kiedy planowane jest kolejne spotkanie?",
-]
+oferta_sprzatanie = Oferta.objects.create(
+    organizacja=org_fundacja,
+    projekt=proj_schronisko,
+    tytul_oferty="Pomoc przy renowacji bud",
+    lokalizacja="Kraków, Schronisko ul. Rybna",
+    data=timezone.now().date() + timedelta(days=5),
+    tematyka="Prace manualne",
+    czas_trwania="4h",
+    wymagania="Chęci do pracy fizycznej, ubrania robocze.",
+    czy_ukonczone=False
+)
+print("Tworzenie wiadomości...")
+Wiadomosc.objects.create(
+    nadawca=jan,
+    odbiorca=piotr,
+    tresc="Dzień dobry, dziękuję za super atmosferę podczas zbiórki!"
+)
+Wiadomosc.objects.create(
+    nadawca=piotr,
+    odbiorca=jan,
+    tresc="Dzięki Janek! Liczymy na Ciebie przy kolejnych akcjach."
+)
 
-for tresc in wiadomosci_dane:
-    nadawca, odbiorca = random.sample(uzytkownicy, 2)
-    Wiadomosc.objects.create(
-        nadawca=nadawca,
-        odbiorca=odbiorca,
-        tresc=tresc
-    )
-
-print("Dodano 5 wiadomości")
 print("Wszystkie dane testowe zostały pomyślnie utworzone!")
