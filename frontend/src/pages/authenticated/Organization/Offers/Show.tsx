@@ -8,16 +8,17 @@ import {
   approveVolunteerCompletion,
 } from "@/api/offers";
 import { Card } from "@/components/ui/card";
-import { createReview } from "@/api/reviews";
+import { createReview, getReviewsByVolunteer } from "@/api/reviews";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function OrganizationOffersShowPage() {
   const params = useParams();
   const id = Number(params.id);
   const [offer, setOffer] = useState<Oferta | null>(null);
+  // Track who has been reviewed to disable button locally
+  const [reviewedMap, setReviewedMap] = useState<Record<number, boolean>>({});
   const { user } = useAuth();
 
-  // Logic: Organization can Edit + Manage. Coordinator can Manage only.
   const isOrg = user?.rola === "organizacja";
   const isCoordinator = user?.rola === "koordynator";
   const canManage = isOrg || isCoordinator;
@@ -37,6 +38,27 @@ export default function OrganizationOffersShowPage() {
     }
     return offer.wolontariusz ? [offer.wolontariusz] : [];
   }, [offer]);
+
+  // On load, check if reviews exist for these volunteers
+  useEffect(() => {
+    if (!volunteers.length) return;
+    const checkReviews = async () => {
+      const map: Record<number, boolean> = {};
+      await Promise.all(
+        volunteers.map(async (v) => {
+          try {
+            // We fetch all reviews for this volunteer and see if any matches this offer
+            const reviews = await getReviewsByVolunteer(v.id);
+            if (reviews.some((r) => r.oferta === id)) {
+              map[v.id] = true;
+            }
+          } catch {}
+        }),
+      );
+      setReviewedMap(map);
+    };
+    checkReviews();
+  }, [volunteers, id]);
 
   const handleConfirm = async (volId: number) => {
     if (!window.confirm("Zaakceptować zgłoszenie wolontariusza?")) return;
@@ -75,6 +97,7 @@ export default function OrganizationOffersShowPage() {
         wolontariusz: volId,
       });
       alert("Recenzja została dodana.");
+      setReviewedMap((prev) => ({ ...prev, [volId]: true })); // Disable button locally
     } catch (e: any) {
       const msg =
         e?.response?.data?.detail ||
@@ -103,7 +126,6 @@ export default function OrganizationOffersShowPage() {
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
-            {/* Only Org can Edit */}
             {isOrg && (
               <Button asChild>
                 <Link to={`/organization/offers/${offer.id}/edit`}>
@@ -155,6 +177,7 @@ export default function OrganizationOffersShowPage() {
                   const isConfirmed = v.czy_potwierdzone;
                   const isCompleted = v.czy_ukonczone;
                   const canReview = isOrg && isCompleted;
+                  const isReviewed = reviewedMap[v.id];
 
                   return (
                     <tr key={v.id} className="border-b last:border-0">
@@ -195,12 +218,11 @@ export default function OrganizationOffersShowPage() {
                           </span>
                         ) : (
                           <span className="text-gray-400 text-xs">
-                            W trakcie / Nie zaczęto
+                            W trakcie
                           </span>
                         )}
                       </td>
                       <td className="py-3 pr-4 align-top flex flex-col gap-2 items-start">
-                        {/* Coordinator & Org can Approve/Confirm */}
                         {canManage && (
                           <>
                             {!isConfirmed && (
@@ -227,7 +249,7 @@ export default function OrganizationOffersShowPage() {
                           </>
                         )}
 
-                        {canReview && (
+                        {canReview && !isReviewed && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -236,6 +258,12 @@ export default function OrganizationOffersShowPage() {
                           >
                             <Star className="w-3 h-3 mr-1" /> Dodaj recenzję
                           </Button>
+                        )}
+
+                        {isReviewed && (
+                          <span className="text-xs text-green-600 font-medium px-1">
+                            Oceniono
+                          </span>
                         )}
                       </td>
                     </tr>
