@@ -1,37 +1,71 @@
-import { Link, Outlet } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
-import Logo from '@/components/ui/logo';
-import { Button } from '@/components/ui/button';
-import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
-import UserMenu from '@/components/UserMenu';
+import { Link, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import Logo from "@/components/ui/logo";
+import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { Menu, X } from "lucide-react";
+import UserMenu from "@/components/UserMenu";
 
 export default function AuthenticatedLayout() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const location = useLocation();
+
+  const isActive = (path: string) =>
+    location.pathname.startsWith(path)
+      ? "text-black font-bold"
+      : "text-gray-700 hover:text-black";
 
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
     <>
       {mobile && <UserMenu variant="mobile" onLogout={() => setOpen(false)} />}
-      <Link className="text-gray-700 hover:text-black" to="/dashboard" onClick={() => setOpen(false)}>Dashboard</Link>
-      {user?.rola === 'wolontariusz' && (
-          <Link className="text-gray-700 hover:text-black" to="/volunteer/offers" onClick={() => setOpen(false)}>Oferty</Link>
+
+      <Link
+        className={isActive("/dashboard")}
+        to="/dashboard"
+        onClick={() => setOpen(false)}
+      >
+        Dashboard
+      </Link>
+
+      {user?.rola === "wolontariusz" && (
+        <Link
+          className={isActive("/volunteer/offers")}
+          to="/volunteer/offers"
+          onClick={() => setOpen(false)}
+        >
+          Oferty
+        </Link>
       )}
-      {user?.rola === 'koordynator' && (
-        <Link className="text-gray-700 hover:text-black" to="/coordinator/projects" onClick={() => setOpen(false)}>Projekty</Link>
+      {user?.rola === "koordynator" && (
+        <Link
+          className={isActive("/coordinator/projects")}
+          to="/coordinator/projects"
+          onClick={() => setOpen(false)}
+        >
+          Projekty
+        </Link>
       )}
-      {user?.rola === 'organizacja' && (
-        <Link className="text-gray-700 hover:text-black" to="/organization/projects" onClick={() => setOpen(false)}>Projekty</Link>
+      {user?.rola === "organizacja" && (
+        <Link
+          className={isActive("/organization/projects")}
+          to="/organization/projects"
+          onClick={() => setOpen(false)}
+        >
+          Projekty
+        </Link>
       )}
+
       {!mobile && <UserMenu variant="desktop" onLogout={undefined} />}
+
       {mobile && (
         <button
-            className="text-gray-700 hover:text-black text-left"
-            onClick={() => {
-              logout();
-            }}
-          >
-            Wyloguj
+          className="text-gray-700 hover:text-black text-left"
+          onClick={() => {
+            logout();
+          }}
+        >
+          Wyloguj
         </button>
       )}
     </>
@@ -45,13 +79,16 @@ export default function AuthenticatedLayout() {
           <Link to="/" className="shrink-0">
             <Logo />
           </Link>
-          {/* Desktop nav */}
           <nav className="ml-auto hidden md:flex items-center gap-4">
             <NavLinks />
           </nav>
-          {/* Mobile trigger */}
           <div className="ml-auto md:hidden">
-            <Button variant="outline" size="icon" onClick={() => setOpen(true)} aria-label="Otwórz menu">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setOpen(true)}
+              aria-label="Otwórz menu"
+            >
               <Menu />
             </Button>
           </div>
@@ -60,15 +97,21 @@ export default function AuthenticatedLayout() {
       <main className="mx-auto max-w-5xl px-4 py-6">
         <Outlet />
       </main>
-
-      {/* Mobile modal menu */}
       {open && (
         <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setOpen(false)}
+          />
           <div className="absolute right-0 top-0 h-full w-72 bg-white shadow-xl p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between mb-2">
               <div className="font-semibold">Menu</div>
-              <Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="Zamknij">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setOpen(false)}
+                aria-label="Zamknij"
+              >
                 <X />
               </Button>
             </div>
