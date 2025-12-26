@@ -13,6 +13,7 @@ import { NumberField } from "./components/NumberField";
 import { BooleanField } from "./components/BooleanField";
 import { DateField } from "./components/DateField";
 import { SelectField } from "./components/SelectField";
+import { TextareaField } from "./components/TextareaField"; // Import new component
 import { ObjectWrapper } from "./components/ObjectWrapper";
 import { ArrayWrapper } from "./components/ArrayWrapper";
 import { ArrayElementWrapper } from "./components/ArrayElementWrapper";
@@ -33,6 +34,7 @@ export const ShadcnAutoFormFieldComponents = {
   boolean: BooleanField,
   date: DateField,
   select: SelectField,
+  textarea: TextareaField, // Register textarea
 } as const;
 export type FieldTypes = keyof typeof ShadcnAutoFormFieldComponents;
 

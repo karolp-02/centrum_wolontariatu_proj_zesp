@@ -38,40 +38,35 @@ const offerSchema = z.object({
       }),
     ),
   tematyka: z
-    .string()
-    .optional()
+    .enum([
+      "Zwierzęta",
+      "Ekologia",
+      "Wsparcie dzieci",
+      "Pomoc społeczna",
+      "Seniorzy",
+      "Kultura",
+      "Sport",
+      "Inne",
+    ])
     .superRefine(
       fieldConfig({
         label: "Tematyka",
-        inputProps: { placeholder: "Wybierz" },
-        fieldType: "select",
-        options: [
-          { label: "Edukacja", value: "Edukacja" },
-          { label: "Ekologia", value: "Ekologia" },
-          { label: "Opieka nad zwierzętami", value: "Opieka nad zwierzętami" },
-          { label: "Pomoc społeczna", value: "Pomoc społeczna" },
-          { label: "Kultura", value: "Kultura" },
-          { label: "Sport", value: "Sport" },
-          { label: "Inne", value: "Inne" },
-        ],
+        inputProps: { placeholder: "Wybierz temat" },
       }),
     ),
   czas_trwania: z
-    .string()
-    .optional()
+    .enum([
+      "2-3h",
+      "1/2 dnia",
+      "1 dzień",
+      "Weekend",
+      "Długoterminowo",
+      "Elastycznie",
+    ])
     .superRefine(
       fieldConfig({
         label: "Czas trwania",
-        inputProps: { placeholder: "Wybierz" },
-        fieldType: "select",
-        options: [
-          { label: "Jednorazowo", value: "Jednorazowo" },
-          { label: "1-2 godziny", value: "1-2 godziny" },
-          { label: "3-5 godzin", value: "3-5 godzin" },
-          { label: "Weekend", value: "Weekend" },
-          { label: "Długoterminowo", value: "Długoterminowo" },
-          { label: "Elastycznie", value: "Elastycznie" },
-        ],
+        inputProps: { placeholder: "Wybierz czas" },
       }),
     ),
   wymagania: z
@@ -116,8 +111,9 @@ export default function OrganizationOffersEditPage() {
             tytul_oferty: offer.tytul_oferty,
             lokalizacja: offer.lokalizacja ?? "",
             data: offer.data ?? "",
-            tematyka: offer.tematyka ?? "",
-            czas_trwania: offer.czas_trwania ?? "",
+            // Cast to specific enum type or string is usually accepted if value matches
+            tematyka: (offer.tematyka as any) ?? "Inne",
+            czas_trwania: (offer.czas_trwania as any) ?? "Elastycznie",
             wymagania: offer.wymagania ?? "",
             czy_ukonczone: offer.czy_ukonczone,
           }}
@@ -127,8 +123,8 @@ export default function OrganizationOffersEditPage() {
                 tytul_oferty: data.tytul_oferty,
                 lokalizacja: data.lokalizacja,
                 data: data.data || "",
-                tematyka: data.tematyka || "",
-                czas_trwania: data.czas_trwania || "",
+                tematyka: data.tematyka,
+                czas_trwania: data.czas_trwania,
                 wymagania: data.wymagania || "",
                 czy_ukonczone: data.czy_ukonczone,
               });

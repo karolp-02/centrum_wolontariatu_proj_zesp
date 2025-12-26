@@ -39,43 +39,40 @@ const offerSchema = z.object({
         inputProps: { placeholder: "RRRR-MM-DD", type: "date" },
       }),
     ),
+  // Using z.enum guarantees a Select dropdown with these values
   tematyka: z
-    .string()
-    .optional()
+    .enum([
+      "Zwierzęta",
+      "Ekologia",
+      "Wsparcie dzieci",
+      "Pomoc społeczna",
+      "Seniorzy",
+      "Kultura",
+      "Sport",
+      "Inne",
+    ])
     .superRefine(
       fieldConfig({
         label: "Tematyka",
-        inputProps: { placeholder: "Wybierz" },
-        fieldType: "select",
-        options: [
-          { label: "Edukacja", value: "Edukacja" },
-          { label: "Ekologia", value: "Ekologia" },
-          { label: "Opieka nad zwierzętami", value: "Opieka nad zwierzętami" },
-          { label: "Pomoc społeczna", value: "Pomoc społeczna" },
-          { label: "Kultura", value: "Kultura" },
-          { label: "Sport", value: "Sport" },
-          { label: "Inne", value: "Inne" },
-        ],
+        inputProps: { placeholder: "Wybierz temat" },
       }),
     ),
   czas_trwania: z
-    .string()
-    .optional()
+    .enum([
+      "2-3h",
+      "1/2 dnia",
+      "1 dzień",
+      "Weekend",
+      "Długoterminowo",
+      "Elastycznie",
+    ])
     .superRefine(
       fieldConfig({
         label: "Czas trwania",
-        inputProps: { placeholder: "Wybierz" },
-        fieldType: "select",
-        options: [
-          { label: "Jednorazowo", value: "Jednorazowo" },
-          { label: "1-2 godziny", value: "1-2 godziny" },
-          { label: "3-5 godzin", value: "3-5 godzin" },
-          { label: "Weekend", value: "Weekend" },
-          { label: "Długoterminowo", value: "Długoterminowo" },
-          { label: "Elastycznie", value: "Elastycznie" },
-        ],
+        inputProps: { placeholder: "Wybierz czas" },
       }),
     ),
+  // Updated fieldType to textarea (now supported)
   wymagania: z
     .string()
     .optional()
@@ -133,9 +130,7 @@ export default function OrganizationOffersCreatePage() {
             tytul_oferty: "",
             lokalizacja: "",
             data: "",
-            tematyka: "",
-            czas_trwania: "",
-            wymagania: "",
+            // No default for enums to force selection or use first value if library handles it
           }}
           onSubmit={async (data) => {
             try {
@@ -144,8 +139,8 @@ export default function OrganizationOffersCreatePage() {
                 tytul_oferty: data.tytul_oferty,
                 lokalizacja: data.lokalizacja,
                 data: data.data || undefined,
-                tematyka: data.tematyka || undefined,
-                czas_trwania: data.czas_trwania || undefined,
+                tematyka: data.tematyka,
+                czas_trwania: data.czas_trwania,
                 wymagania: data.wymagania || undefined,
               });
             } finally {
