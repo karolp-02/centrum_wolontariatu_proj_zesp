@@ -1,32 +1,31 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import Home from './pages/guest/Home/Index';
-import About from './pages/guest/About/Index';
-import NotFound from './pages/NotFound/Index';
-import Dashboard from './pages/authenticated/Dashboard/Index';
-import Profile from './pages/authenticated/Profile/Index';
-import GuestLayout from './layouts/GuestLayout';
-import AuthenticatedLayout from './layouts/AuthenticatedLayout';
-import ProtectedRoute from './components/ProtectedRoute';
-import RoleRoute from './components/RoleRoute';
-import Login from './pages/guest/Login/Index';
-import Register from './pages/guest/Register/Index';
-import { AuthProvider } from './hooks/useAuth';
-import VolunteerOffersPage from './pages/authenticated/Volunteer/Offers/Index';
-import VolunteerAppliedOffersPage from './pages/authenticated/Volunteer/Offers/Applied';
-import CoordinatorProjectsPage from './pages/authenticated/Coordinator/Projects/Index';
-import OrganizationProjectsPage from './pages/authenticated/Organization/Projects/Index';
-import OrganizationProjectsCreatePage from './pages/authenticated/Organization/Projects/Create';
-import OrganizationProjectsEditPage from './pages/authenticated/Organization/Projects/Edit';
-import OrganizationProjectsShowPage from './pages/authenticated/Organization/Projects/Show';
-import OrganizationOffersListPage from './pages/authenticated/Organization/Offers/Index';
-import OrganizationOffersCreatePage from './pages/authenticated/Organization/Offers/Create';
-import OrganizationOffersEditPage from './pages/authenticated/Organization/Offers/Edit';
-import OrganizationOffersShowPage from './pages/authenticated/Organization/Offers/Show';
-import VolunteerOfferShowPage from './pages/authenticated/Volunteer/Offers/Show';
-import OrganizationVolunteerShowPage from './pages/authenticated/Organization/Volunteers/Show';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Home from "./pages/guest/Home/Index";
+import About from "./pages/guest/About/Index";
+import NotFound from "./pages/NotFound/Index";
+import Dashboard from "./pages/authenticated/Dashboard/Index";
+import Profile from "./pages/authenticated/Profile/Index";
+import GuestLayout from "./layouts/GuestLayout";
+import AuthenticatedLayout from "./layouts/AuthenticatedLayout";
+import ProtectedRoute from "./components/ProtectedRoute";
+import RoleRoute from "./components/RoleRoute";
+import Login from "./pages/guest/Login/Index";
+import Register from "./pages/guest/Register/Index";
+import { AuthProvider } from "./hooks/useAuth";
+import VolunteerOffersPage from "./pages/authenticated/Volunteer/Offers/Index";
+import VolunteerAppliedOffersPage from "./pages/authenticated/Volunteer/Offers/Applied";
+import CoordinatorProjectsPage from "./pages/authenticated/Coordinator/Projects/Index";
+import OrganizationProjectsPage from "./pages/authenticated/Organization/Projects/Index";
+import OrganizationProjectsCreatePage from "./pages/authenticated/Organization/Projects/Create";
+import OrganizationProjectsEditPage from "./pages/authenticated/Organization/Projects/Edit";
+import OrganizationProjectsShowPage from "./pages/authenticated/Organization/Projects/Show";
+import OrganizationOffersListPage from "./pages/authenticated/Organization/Offers/Index";
+import OrganizationOffersCreatePage from "./pages/authenticated/Organization/Offers/Create";
+import OrganizationOffersEditPage from "./pages/authenticated/Organization/Offers/Edit";
+import OrganizationOffersShowPage from "./pages/authenticated/Organization/Offers/Show"; // Reused for Coordinator
+import VolunteerOfferShowPage from "./pages/authenticated/Volunteer/Offers/Show";
+import OrganizationVolunteerShowPage from "./pages/authenticated/Organization/Volunteers/Show";
 
 export default function App() {
-
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -83,6 +82,16 @@ export default function App() {
                 </RoleRoute>
               }
             />
+            {/* Added missing Coordinator Offer Route */}
+            <Route
+              path="/coordinator/offers/:id"
+              element={
+                <RoleRoute allow={["koordynator"]}>
+                  <OrganizationOffersShowPage />
+                </RoleRoute>
+              }
+            />
+
             <Route
               path="/organization/projects"
               element={
