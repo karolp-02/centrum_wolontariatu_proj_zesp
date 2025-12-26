@@ -1,37 +1,92 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { useNavigate, useParams } from 'react-router-dom';
-import { getProjects } from '@/api/projects';
-import { getUsers } from '@/api/users';
-import { getOfferById, updateOffer } from '@/api/offers';
-import { AutoForm } from '@/components/ui/autoform';
-import { SubmitButton } from '@/components/ui/autoform/components/SubmitButton';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { ZodProvider, fieldConfig } from '@autoform/zod';
-import z from 'zod';
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate, useParams } from "react-router-dom";
+import { getOfferById, updateOffer } from "@/api/offers";
+import { AutoForm } from "@/components/ui/autoform";
+import { SubmitButton } from "@/components/ui/autoform/components/SubmitButton";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ZodProvider, fieldConfig } from "@autoform/zod";
+import z from "zod";
 
 const offerSchema = z.object({
-  tytul_oferty: z.string().min(1).max(255).superRefine(
-    fieldConfig({ label: 'Tytuł oferty', inputProps: { placeholder: 'Tytuł' } })
-  ),
-  lokalizacja: z.string().min(1).superRefine(
-    fieldConfig({ label: 'Lokalizacja', inputProps: { placeholder: 'np. Kraków' } })
-  ),
-  data: z.string().optional().superRefine(
-    fieldConfig({ label: 'Data', inputProps: { placeholder: 'RRRR-MM-DD', type: 'date' } })
-  ),
-  tematyka: z.string().optional().superRefine(
-    fieldConfig({ label: 'Tematyka', inputProps: { placeholder: 'np. Ekologia' } })
-  ),
-  czas_trwania: z.string().optional().superRefine(
-    fieldConfig({ label: 'Czas trwania', inputProps: { placeholder: 'np. 2-3h tygodniowo' } })
-  ),
-  wymagania: z.string().optional().superRefine(
-    fieldConfig({ label: 'Wymagania', inputProps: { placeholder: 'np. komunikatywność' } })
-  ),
-  czy_ukonczone: z.boolean().superRefine(
-    fieldConfig({ label: 'Czy ukończone?' })
-  ),
+  tytul_oferty: z
+    .string()
+    .min(1)
+    .max(255)
+    .superRefine(
+      fieldConfig({
+        label: "Tytuł oferty",
+        inputProps: { placeholder: "Tytuł" },
+      }),
+    ),
+  lokalizacja: z
+    .string()
+    .min(1)
+    .superRefine(
+      fieldConfig({
+        label: "Lokalizacja",
+        inputProps: { placeholder: "np. Kraków" },
+      }),
+    ),
+  data: z
+    .string()
+    .optional()
+    .superRefine(
+      fieldConfig({
+        label: "Data",
+        inputProps: { placeholder: "RRRR-MM-DD", type: "date" },
+      }),
+    ),
+  tematyka: z
+    .string()
+    .optional()
+    .superRefine(
+      fieldConfig({
+        label: "Tematyka",
+        inputProps: { placeholder: "Wybierz" },
+        fieldType: "select",
+        options: [
+          { label: "Edukacja", value: "Edukacja" },
+          { label: "Ekologia", value: "Ekologia" },
+          { label: "Opieka nad zwierzętami", value: "Opieka nad zwierzętami" },
+          { label: "Pomoc społeczna", value: "Pomoc społeczna" },
+          { label: "Kultura", value: "Kultura" },
+          { label: "Sport", value: "Sport" },
+          { label: "Inne", value: "Inne" },
+        ],
+      }),
+    ),
+  czas_trwania: z
+    .string()
+    .optional()
+    .superRefine(
+      fieldConfig({
+        label: "Czas trwania",
+        inputProps: { placeholder: "Wybierz" },
+        fieldType: "select",
+        options: [
+          { label: "Jednorazowo", value: "Jednorazowo" },
+          { label: "1-2 godziny", value: "1-2 godziny" },
+          { label: "3-5 godzin", value: "3-5 godzin" },
+          { label: "Weekend", value: "Weekend" },
+          { label: "Długoterminowo", value: "Długoterminowo" },
+          { label: "Elastycznie", value: "Elastycznie" },
+        ],
+      }),
+    ),
+  wymagania: z
+    .string()
+    .optional()
+    .superRefine(
+      fieldConfig({
+        label: "Wymagania (Opis)",
+        fieldType: "textarea",
+        inputProps: { placeholder: "Opisz wymagania..." },
+      }),
+    ),
+  czy_ukonczone: z
+    .boolean()
+    .superRefine(fieldConfig({ label: "Czy ukończone?" })),
 });
 const provider = new ZodProvider(offerSchema);
 
@@ -59,11 +114,11 @@ export default function OrganizationOffersEditPage() {
           schema={provider}
           defaultValues={{
             tytul_oferty: offer.tytul_oferty,
-            lokalizacja: offer.lokalizacja ?? '',
-            data: offer.data ?? '',
-            tematyka: offer.tematyka ?? '',
-            czas_trwania: offer.czas_trwania ?? '',
-            wymagania: offer.wymagania ?? '',
+            lokalizacja: offer.lokalizacja ?? "",
+            data: offer.data ?? "",
+            tematyka: offer.tematyka ?? "",
+            czas_trwania: offer.czas_trwania ?? "",
+            wymagania: offer.wymagania ?? "",
             czy_ukonczone: offer.czy_ukonczone,
           }}
           onSubmit={async (data) => {
@@ -71,10 +126,10 @@ export default function OrganizationOffersEditPage() {
               await updateOffer(id, {
                 tytul_oferty: data.tytul_oferty,
                 lokalizacja: data.lokalizacja,
-                data: data.data || '',
-                tematyka: data.tematyka || '',
-                czas_trwania: data.czas_trwania || '',
-                wymagania: data.wymagania || '',
+                data: data.data || "",
+                tematyka: data.tematyka || "",
+                czas_trwania: data.czas_trwania || "",
+                wymagania: data.wymagania || "",
                 czy_ukonczone: data.czy_ukonczone,
               });
             } finally {
