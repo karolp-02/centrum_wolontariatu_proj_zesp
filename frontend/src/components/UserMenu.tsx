@@ -4,11 +4,11 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
 type Props = {
-  variant?: 'desktop' | 'mobile';
-  onLogout?: () => void; // e.g., close mobile drawer
+  variant?: "desktop" | "mobile";
+  onLogout?: () => void;
 };
 
-export default function UserMenu({ variant = 'desktop', onLogout }: Props) {
+export default function UserMenu({ variant = "desktop", onLogout }: Props) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -25,7 +25,9 @@ export default function UserMenu({ variant = 'desktop', onLogout }: Props) {
 
   if (!user) return null;
 
-  const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ") || `@${user.username}`;
+  const displayName =
+    [user.first_name, user.last_name].filter(Boolean).join(" ") ||
+    `@${user.username}`;
   const initials = (() => {
     const first = (user.first_name || user.username || "").trim();
     const last = (user.last_name || "").trim();
@@ -34,8 +36,10 @@ export default function UserMenu({ variant = 'desktop', onLogout }: Props) {
     return (a + b).trim() || "U";
   })();
 
-  // Mobile variant: inline block within the drawer
-  if (variant === 'mobile') {
+  const isVolunteer = user.rola === "wolontariusz";
+
+  // Mobile variant
+  if (variant === "mobile") {
     return (
       <div className="pt-2">
         <div className="flex items-center gap-3 pb-3 border-b">
@@ -43,19 +47,33 @@ export default function UserMenu({ variant = 'desktop', onLogout }: Props) {
             {initials}
           </div>
           <div className="min-w-0">
-            <div className="font-medium truncate" title={displayName}>{displayName}</div>
-            <div className="text-xs text-gray-500 truncate" title={user.email}>{user.email}</div>
-            {user.rola === 'wolontariusz' && (
-              <div className={`inline-flex items-center gap-2 mt-1 text-[11px] px-1.5 py-0.5 rounded border ${user.czy_maloletni ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'bg-emerald-50 border-emerald-300 text-emerald-700'}`}>
-                {user.czy_maloletni ? 'Małoletni' : 'Pełnoletni'}{typeof user.wiek === 'number' ? ` (${user.wiek} lat)` : ''}
+            <div className="font-medium truncate" title={displayName}>
+              {displayName}
+            </div>
+            <div className="text-xs text-gray-500 truncate" title={user.email}>
+              {user.email}
+            </div>
+            {isVolunteer && (
+              <div
+                className={`inline-flex items-center gap-2 mt-1 text-[11px] px-1.5 py-0.5 rounded border ${user.czy_maloletni ? "bg-yellow-50 border-yellow-300 text-yellow-700" : "bg-emerald-50 border-emerald-300 text-emerald-700"}`}
+              >
+                {user.czy_maloletni ? "Małoletni" : "Pełnoletni"}
+                {typeof user.wiek === "number" ? ` (${user.wiek} lat)` : ""}
               </div>
             )}
           </div>
         </div>
         <div className="pt-3 space-y-2">
-          <Link className="text-gray-700 hover:text-black block" to="/volunteer/applied-offers" onClick={() => onLogout?.()}>
-            Zgłoszone oferty
-          </Link>
+          {/* HIDE FOR ORG/COORD */}
+          {isVolunteer && (
+            <Link
+              className="text-gray-700 hover:text-black block"
+              to="/volunteer/applied-offers"
+              onClick={() => onLogout?.()}
+            >
+              Zgłoszone oferty
+            </Link>
+          )}
           <button
             className="text-gray-700 hover:text-black"
             onClick={() => {
@@ -70,7 +88,7 @@ export default function UserMenu({ variant = 'desktop', onLogout }: Props) {
     );
   }
 
-  // Desktop variant: avatar with popover
+  // Desktop variant
   return (
     <div className="relative" ref={ref}>
       <button
@@ -89,21 +107,41 @@ export default function UserMenu({ variant = 'desktop', onLogout }: Props) {
               {initials}
             </div>
             <div className="min-w-0">
-              <div className="font-medium truncate" title={displayName}>{displayName}</div>
-              <div className="text-xs text-gray-500 truncate" title={user.email}>{user.email}</div>
-              {user.rola === 'wolontariusz' && (
-                <div className={`inline-flex items-center gap-2 mt-1 text-[11px] px-1.5 py-0.5 rounded border ${user.czy_maloletni ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'bg-emerald-50 border-emerald-300 text-emerald-700'}`}>
-                  {user.czy_maloletni ? 'Małoletni' : 'Pełnoletni'}{typeof user.wiek === 'number' ? ` (${user.wiek} lat)` : ''}
+              <div className="font-medium truncate" title={displayName}>
+                {displayName}
+              </div>
+              <div
+                className="text-xs text-gray-500 truncate"
+                title={user.email}
+              >
+                {user.email}
+              </div>
+              {isVolunteer && (
+                <div
+                  className={`inline-flex items-center gap-2 mt-1 text-[11px] px-1.5 py-0.5 rounded border ${user.czy_maloletni ? "bg-yellow-50 border-yellow-300 text-yellow-700" : "bg-emerald-50 border-emerald-300 text-emerald-700"}`}
+                >
+                  {user.czy_maloletni ? "Małoletni" : "Pełnoletni"}
+                  {typeof user.wiek === "number" ? ` (${user.wiek} lat)` : ""}
                 </div>
               )}
             </div>
           </div>
           <div className="pt-3 space-y-2">
-            <Button asChild variant="outline" className="w-full justify-start">
-              <Link to="/volunteer/applied-offers" onClick={() => setOpen(false)}>
-                Zgłoszone oferty
-              </Link>
-            </Button>
+            {/* HIDE FOR ORG/COORD */}
+            {isVolunteer && (
+              <Button
+                asChild
+                variant="outline"
+                className="w-full justify-start"
+              >
+                <Link
+                  to="/volunteer/applied-offers"
+                  onClick={() => setOpen(false)}
+                >
+                  Zgłoszone oferty
+                </Link>
+              </Button>
+            )}
             <Button
               variant="outline"
               className="w-full justify-start"

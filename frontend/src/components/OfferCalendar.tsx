@@ -54,14 +54,13 @@ export default function OfferCalendar({
   className,
 }: OfferCalendarProps) {
   const [selected, setSelected] = useState<Oferta | null>(null);
-  const { user } = useAuth(); // Get current user to determine link path
+  const { user } = useAuth(); // Get current user
 
   const events: EventType[] = useMemo(() => {
     return (offers || []).map((o) => {
       const dateStr = o.data ? `${o.data}` : undefined;
       let start = dateStr ? parseISO(dateStr) : new Date();
       if (!isValid(start)) {
-        // fallback to parsing as date-only
         try {
           start = parse(dateStr ?? "", "yyyy-MM-dd", new Date());
         } catch {
@@ -101,30 +100,12 @@ export default function OfferCalendar({
     [],
   );
 
-  const buildTooltip = (o: Oferta) => {
-    const lines = [
-      `${o.tytul_oferty}`,
-      o.organizacja?.nazwa_organizacji
-        ? `Organizacja: ${o.organizacja.nazwa_organizacji}`
-        : undefined,
-      o.lokalizacja ? `Lokalizacja: ${o.lokalizacja}` : undefined,
-      o.tematyka ? `Tematyka: ${o.tematyka}` : undefined,
-      o.liczba_uczestnikow !== undefined
-        ? `Uczestnicy: ${o.liczba_uczestnikow}`
-        : undefined,
-      o.czas_trwania ? `Czas trwania: ${o.czas_trwania}` : undefined,
-      o.wymagania ? `Wymagania: ${o.wymagania}` : undefined,
-    ].filter(Boolean);
-    return lines.join("\n");
-  };
-
+  // Determine link based on role
   const getOfferLink = (id: number) => {
-    // Determine path based on role
-    // Adjust these paths if your routing structure is different
-    if (user?.rola === "wolontariusz") return `/volunteer/offers/${id}`;
-    if (user?.rola === "organizacja") return `/organization/offers/${id}`;
-    if (user?.rola === "koordynator") return `/coordinator/offers/${id}`;
-    return `/offers/${id}`; // Fallback/Public
+    if (user?.rola === "organizacja" || user?.rola === "koordynator") {
+      return `/organization/offers/${id}`;
+    }
+    return `/volunteer/offers/${id}`;
   };
 
   const CustomToolbar = ({ label, onNavigate }: ToolbarProps) => (
@@ -146,9 +127,7 @@ export default function OfferCalendar({
 
   const CustomEvent = (props: any) => {
     const event = props.event as EventType;
-    const title = props.title ?? event.title;
-    const tooltip = buildTooltip(event.resource);
-    return <span title={tooltip}>{title}</span>;
+    return <span>{event.title}</span>;
   };
 
   return (
@@ -180,7 +159,7 @@ export default function OfferCalendar({
             onClick={() => setSelected(null)}
           />
           <Card className="relative z-10 w-[92vw] max-w-xl p-6 shadow-xl">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-4 mb-4">
               <h3 className="text-xl font-bold">{selected.tytul_oferty}</h3>
               <button
                 className="text-2xl text-gray-500 hover:text-black leading-none"
@@ -190,7 +169,7 @@ export default function OfferCalendar({
               </button>
             </div>
 
-            <div className="mt-4 space-y-2 text-sm text-gray-700">
+            <div className="space-y-2 text-sm text-gray-700">
               {selected.organizacja?.nazwa_organizacji && (
                 <div className="flex gap-2">
                   <span className="font-semibold w-24 shrink-0">
@@ -221,37 +200,15 @@ export default function OfferCalendar({
                   <span>{selected.tematyka}</span>
                 </div>
               )}
-              {selected.liczba_uczestnikow !== undefined && (
-                <div className="flex gap-2">
-                  <span className="font-semibold w-24 shrink-0">
-                    Uczestnicy:
-                  </span>
-                  <span>{selected.liczba_uczestnikow}</span>
-                </div>
-              )}
-              {selected.czas_trwania && (
-                <div className="flex gap-2">
-                  <span className="font-semibold w-24 shrink-0">Czas:</span>
-                  <span>{selected.czas_trwania}</span>
-                </div>
-              )}
-              {selected.wymagania && (
-                <div className="flex gap-2">
-                  <span className="font-semibold w-24 shrink-0">
-                    Wymagania:
-                  </span>
-                  <span>{selected.wymagania}</span>
-                </div>
-              )}
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setSelected(null)}>
                 Zamknij
               </Button>
-              <Link to={getOfferLink(selected.id)}>
-                <Button>Zobacz szczegóły</Button>
-              </Link>
+              <Button asChild>
+                <Link to={getOfferLink(selected.id)}>Zobacz szczegóły</Link>
+              </Button>
             </div>
           </Card>
         </div>

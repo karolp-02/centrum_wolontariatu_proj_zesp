@@ -21,7 +21,7 @@ import OrganizationProjectsShowPage from "./pages/authenticated/Organization/Pro
 import OrganizationOffersListPage from "./pages/authenticated/Organization/Offers/Index";
 import OrganizationOffersCreatePage from "./pages/authenticated/Organization/Offers/Create";
 import OrganizationOffersEditPage from "./pages/authenticated/Organization/Offers/Edit";
-import OrganizationOffersShowPage from "./pages/authenticated/Organization/Offers/Show"; // Reused for Coordinator
+import OrganizationOffersShowPage from "./pages/authenticated/Organization/Offers/Show";
 import VolunteerOfferShowPage from "./pages/authenticated/Volunteer/Offers/Show";
 import OrganizationVolunteerShowPage from "./pages/authenticated/Organization/Volunteers/Show";
 
@@ -82,16 +82,6 @@ export default function App() {
                 </RoleRoute>
               }
             />
-            {/* Added missing Coordinator Offer Route */}
-            <Route
-              path="/coordinator/offers/:id"
-              element={
-                <RoleRoute allow={["koordynator"]}>
-                  <OrganizationOffersShowPage />
-                </RoleRoute>
-              }
-            />
-
             <Route
               path="/organization/projects"
               element={
@@ -108,10 +98,11 @@ export default function App() {
                 </RoleRoute>
               }
             />
+            {/* UPDATED: Allow Coordinator access */}
             <Route
               path="/organization/projects/:id"
               element={
-                <RoleRoute allow={["organizacja"]}>
+                <RoleRoute allow={["organizacja", "koordynator"]}>
                   <OrganizationProjectsShowPage />
                 </RoleRoute>
               }
@@ -140,10 +131,11 @@ export default function App() {
                 </RoleRoute>
               }
             />
+            {/* UPDATED: Allow Coordinator access */}
             <Route
               path="/organization/offers/:id"
               element={
-                <RoleRoute allow={["organizacja"]}>
+                <RoleRoute allow={["organizacja", "koordynator"]}>
                   <OrganizationOffersShowPage />
                 </RoleRoute>
               }

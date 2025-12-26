@@ -26,34 +26,42 @@ class ProjektViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Projekt.objects.all()
-
-        # Filter by organization
         organizacja_id = self.request.query_params.get('organizacja')
         if organizacja_id:
             queryset = queryset.filter(organizacja_id=organizacja_id)
-
-        # Search in project name or description
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
                 Q(nazwa_projektu__icontains=search) |
                 Q(opis_projektu__icontains=search)
             )
-
         return queryset
 
     def perform_create(self, serializer):
-        if self.request.user.rola not in ['organizacja', 'koordynator']:
-            raise PermissionError('Only organizations and coordinators can create projects')
+        # RESTRICTION: Only Organizations can create projects
+        if self.request.user.rola != 'organizacja':
+            raise PermissionDenied("Tylko organizacje mogą tworzyć projekty.")
 
-        if self.request.user.rola == 'organizacja' and self.request.user.organizacja:
+        if self.request.user.organizacja:
             serializer.save(organizacja=self.request.user.organizacja)
         else:
-            serializer.save()
+            raise PermissionDenied("Konto organizacji nie jest powiązane z profilem organizacji.")
+
+    def perform_update(self, serializer):
+        if self.request.user.rola != 'organizacja':
+            raise PermissionDenied("Tylko organizacje mogą edytować projekty.")
+        # Ensure they own the project (IsOwnerOrReadOnly typically handles this, but being safe)
+        if serializer.instance.organizacja != self.request.user.organizacja:
+            raise PermissionDenied("Nie możesz edytować cudzego projektu.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if self.request.user.rola != 'organizacja' or instance.organizacja != self.request.user.organizacja:
+             raise PermissionDenied("Nie możesz usunąć tego projektu.")
+        instance.delete()
 
     @action(detail=True, methods=['get'])
     def oferty(self, request, pk=None):
-        """Get all offers for a specific project"""
         project = self.get_object()
         offers = project.oferty.all()
         serializer = OfertaSerializer(offers, many=True)
@@ -73,31 +81,24 @@ class OfertaViewSet(viewsets.ModelViewSet):
         projekt_id = self.request.query_params.get('projekt')
         if projekt_id:
             queryset = queryset.filter(projekt_id=projekt_id)
-
         organizacja_id = self.request.query_params.get('organizacja')
         if organizacja_id:
             queryset = queryset.filter(organizacja_id=organizacja_id)
-
         lokalizacja = self.request.query_params.get('lokalizacja')
         if lokalizacja:
             queryset = queryset.filter(lokalizacja__icontains=lokalizacja)
-
         tematyka = self.request.query_params.get('tematyka')
         if tematyka:
             queryset = queryset.filter(tematyka__icontains=tematyka)
-
         czas_trwania = self.request.query_params.get('czas_trwania')
         if czas_trwania:
             queryset = queryset.filter(czas_trwania__icontains=czas_trwania)
-
         tylko_wolne = self.request.query_params.get('tylko_wolne')
         if tylko_wolne and tylko_wolne.lower() == 'true':
             queryset = queryset.filter(zlecenia__isnull=True)
-
         wymagania = self.request.query_params.get('wymagania')
         if wymagania:
             queryset = queryset.filter(wymagania__icontains=wymagania)
-
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
@@ -106,39 +107,47 @@ class OfertaViewSet(viewsets.ModelViewSet):
                 Q(tematyka__icontains=search) |
                 Q(wymagania__icontains=search)
             )
-
         completed = self.request.query_params.get('completed')
         if completed is not None:
             if completed.lower() == 'true':
                 queryset = queryset.filter(czy_ukonczone=True)
             else:
                 queryset = queryset.filter(czy_ukonczone=False)
-
         return queryset
 
     def perform_create(self, serializer):
-        if self.request.user.rola in ['organizacja', 'koordynator'] and self.request.user.organizacja:
+        # RESTRICTION: Only Organizations can create offers
+        if self.request.user.rola != 'organizacja':
+            raise PermissionDenied("Tylko organizacje mogą tworzyć oferty.")
+        if self.request.user.organizacja:
             serializer.save(organizacja=self.request.user.organizacja)
         else:
-            raise serializers.ValidationError({"error": "Only organization users can create offers"})
+                raise PermissionDenied("Brak profilu organizacji.")
+
+    def perform_update(self, serializer):
+        if self.request.user.rola != 'organizacja':
+                raise PermissionDenied("Tylko organizacje mogą edytować oferty.")
+        if serializer.instance.organizacja != self.request.user.organizacja:
+                raise PermissionDenied("Nie możesz edytować cudzej oferty.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if self.request.user.rola != 'organizacja' or instance.organizacja != self.request.user.organizacja:
+                raise PermissionDenied("Nie możesz usunąć tej oferty.")
+        instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def apply(self, request, pk=None):
         """Apply for an offer (volunteers only)"""
         offer = self.get_object()
-
         if request.user.rola != 'wolontariusz':
             return Response({'error': 'Only volunteers can apply'}, status=status.HTTP_403_FORBIDDEN)
-
         if offer.czy_ukonczone:
             return Response({'error': 'Offer is closed'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create Zlecenie with default status
         zlecenie, created = Zlecenie.objects.get_or_create(oferta=offer, wolontariusz=request.user)
-
         if not created:
-             return Response({'message': 'Already applied'}, status=status.HTTP_200_OK)
-
+                return Response({'message': 'Already applied'}, status=status.HTTP_200_OK)
         return Response(OfertaSerializer(offer).data)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
@@ -146,11 +155,10 @@ class OfertaViewSet(viewsets.ModelViewSet):
         """Organization/Coordinator accepts application"""
         offer = self.get_object()
 
-        # Permission Check
         if request.user.rola not in ['organizacja', 'koordynator']:
                 return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
 
-        # RESTRICTION: Only Organizations must own the offer. Coordinators can approve any (simplified).
+        # Only Organizations are restricted to their own offers. Coordinators can approve any.
         if request.user.rola == 'organizacja' and offer.organizacja != request.user.organizacja:
                 return Response({'error': 'Not your offer'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -168,11 +176,9 @@ class OfertaViewSet(viewsets.ModelViewSet):
         """Organization/Coordinator marks work as done"""
         offer = self.get_object()
 
-        # Permission Check
         if request.user.rola not in ['organizacja', 'koordynator']:
                 return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
 
-        # RESTRICTION: Only Organizations must own the offer. Coordinators can approve any.
         if request.user.rola == 'organizacja' and offer.organizacja != request.user.organizacja:
                 return Response({'error': 'Not your offer'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -187,7 +193,6 @@ class OfertaViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def withdraw(self, request, pk=None):
-        """Withdraw application"""
         offer = self.get_object()
         Zlecenie.objects.filter(oferta=offer, wolontariusz=request.user).delete()
         return Response(OfertaSerializer(offer).data)
@@ -202,7 +207,6 @@ class OfertaViewSet(viewsets.ModelViewSet):
 
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=A4)
-
         try:
             regular_font, bold_font = get_pl_font_names()
             pdf.setFont(bold_font, 20)

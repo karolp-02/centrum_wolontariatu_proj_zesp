@@ -17,11 +17,9 @@ export default function OrganizationOffersShowPage() {
   const [offer, setOffer] = useState<Oferta | null>(null);
   const { user } = useAuth();
 
-  // Roles
+  // Logic: Organization can Edit + Manage. Coordinator can Manage only.
   const isOrg = user?.rola === "organizacja";
   const isCoordinator = user?.rola === "koordynator";
-
-  // Both Org and Coordinator can manage volunteers (Confirm/Approve)
   const canManage = isOrg || isCoordinator;
 
   const fetchOffer = () => {
@@ -105,8 +103,8 @@ export default function OrganizationOffersShowPage() {
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
-            {/* Allow Edit for both Org and Coordinator (since Coords can create offers) */}
-            {canManage && (
+            {/* Only Org can Edit */}
+            {isOrg && (
               <Button asChild>
                 <Link to={`/organization/offers/${offer.id}/edit`}>
                   <Pencil className="w-4 h-4 mr-2" /> Edytuj
@@ -156,8 +154,6 @@ export default function OrganizationOffersShowPage() {
                 {volunteers.map((v) => {
                   const isConfirmed = v.czy_potwierdzone;
                   const isCompleted = v.czy_ukonczone;
-
-                  // Review condition: Only Organization can review, and work must be completed
                   const canReview = isOrg && isCompleted;
 
                   return (
@@ -204,7 +200,7 @@ export default function OrganizationOffersShowPage() {
                         )}
                       </td>
                       <td className="py-3 pr-4 align-top flex flex-col gap-2 items-start">
-                        {/* ACTION BUTTONS: Visible for Org OR Coordinator */}
+                        {/* Coordinator & Org can Approve/Confirm */}
                         {canManage && (
                           <>
                             {!isConfirmed && (
@@ -231,7 +227,6 @@ export default function OrganizationOffersShowPage() {
                           </>
                         )}
 
-                        {/* REVIEW BUTTON: Strictly Org only */}
                         {canReview && (
                           <Button
                             size="sm"
@@ -241,12 +236,6 @@ export default function OrganizationOffersShowPage() {
                           >
                             <Star className="w-3 h-3 mr-1" /> Dodaj recenzję
                           </Button>
-                        )}
-
-                        {!isOrg && isCompleted && (
-                          <span className="text-[10px] text-gray-400">
-                            Recenzje: Tylko Org
-                          </span>
                         )}
                       </td>
                     </tr>
