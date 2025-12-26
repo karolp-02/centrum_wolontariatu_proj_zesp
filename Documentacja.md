@@ -57,7 +57,7 @@ Ważne: w projekcie autorsko zmodyfikowany model użytkownika `Uzytkownik` i mod
 
 ---
 
-## Szybkie uruchomienie (deweloper / admin)
+## Szybki start (deweloper / admin)
 
 ### Wymagania wstępne
 - Docker + Docker Compose
@@ -123,14 +123,16 @@ W kodzie klient używa tokenu DRF w `localStorage` pod kluczem `token`.
 - Wystawia recenzje (tylko organizacja może tworzyć recenzje w modelu).
 
 ### Koordynator
-- Podobne uprawnienia jak organizacja w niektórych miejscach — może tworzyć projekty i oferty.
+- W pewnym rodzaju supervisor
+- Ma podgląd do wszystkich ofert i projektów, ale nie może ich edytować
+- Moze obserwować statusy zgłoszeń i zatwierdzać wykonanie zadania
 
 ---
 
 ## Instrukcja dla administratora
 
 ### 1. Przygotowanie i uruchomienie środowiska
-- Postępuj zgodnie z sekcją "Szybkie uruchomienie".
+- Postępuj zgodnie z sekcją "Szybki start".
 - Sprawdź logi backendu: `docker-compose logs -f backend`.
 - Jeżeli aplikacja nie łączy się z bazą, upewnij się, że kontener `db` jest zdrowy (`docker ps`, `docker logs postgres-db`).
 
@@ -168,7 +170,7 @@ Poniżej krótkie, praktyczne wskazówki dla trzech głównych ról.
 ### Rejestracja i logowanie
 - Wejdź na frontend (`/register`), wybierz typ konta: `wolontariusz`, `koordynator`, `organizacja`.
 - Wolontariusze muszą podać `wiek` — system automatycznie ustali `czy_maloletni`.
-- Po rejestracji otrzymasz token (zapisany w `localStorage`) i przekierowanie do panelu.
+- Po rejestracji następuje przekierowanie do panelu.
 
 ### Wolontariusz — jak aplikować i pobierać certyfikaty
 - Przeglądaj oferty: `/volunteer/offers`.
@@ -179,11 +181,11 @@ Poniżej krótkie, praktyczne wskazówki dla trzech głównych ról.
 
 ### Organizacja — publikacja i zarządzanie ofertą
 - Tworzenie projektu → tworzenie oferty powiązanej z projektem.
-- Możesz przypisać wolontariusza (akceptacja) lub użyć mechanizmu `Zlecenie` do zbiorczego dodawania uczestników.
+- Możesz akceptować aplikacje wolontariusza.
 - Po zakończeniu oferty ustaw `czy_ukonczone=True` (akcja "approve"), co pozwala wystawić recenzję i wygenerować certyfikaty.
 
 ### Koordynator — obsługa projektów
-- Koordynator ma podobne uprawnienia do zarządzania projektami i ofertami; może też przeglądać listę wolontariuszy i przydzielać uczestników.
+- Koordynator może też przeglądać listę wolontariuszy i zatwierdzać uczestników oraz wykonanie zadań.
 
 ### Recenzje i oceny
 - Tylko użytkownicy z rolą `organizacja` mogą tworzyć recenzje (`Recenzja`).
