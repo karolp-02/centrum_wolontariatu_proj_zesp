@@ -53,7 +53,7 @@ Wolontariat to aplikacja (backend w Django + REST, frontend w React/Vite) do zar
 - `frontend/` — aplikacja React + Vite (TypeScript)
 - `docker-compose.yml` — konfiguracja usług: `backend`, `frontend`, `db`
 
-Ważne: w projekcie autorsko zmodyfikowany model użytkownika `Uzytkownik` i model `Oferta`, `Zlecenie`, `Recenzja` (zmiany migracji widoczne w katalogu `migrations/`).
+> Ważne: w projekcie autorsko zmodyfikowany model użytkownika `Uzytkownik` i model `Oferta`, `Zlecenie`, `Recenzja` (zmiany migracji widoczne w katalogu `migrations/`).
 
 ---
 
@@ -65,14 +65,14 @@ Ważne: w projekcie autorsko zmodyfikowany model użytkownika `Uzytkownik` i mod
 
 ### Uruchomienie z Docker Compose (zalecane)
 1. Sklonuj repo:
-   - `git clone <repo-url>`
+   - `git clone <repo-url> wolontariat`
 2. Przejdź do katalogu projektu:
    - `cd wolontariat`
 3. Skopiuj przykładowy plik `.env`:
    - `cp .env.example .env`
-   - Dostosuj wartości (opcjonalnie).
+   - Dostosuj wartości *(opcjonalnie)*.
 4. Uruchom kontenery:
-   - `docker-compose up -d`
+   - `docker-compose up --build -d`
 5. Zainicjuj bazę i dane:
    - `docker-compose exec backend python manage.py migrate`
    - (opcjonalnie) `docker-compose exec backend python manage.py loaddata <plik.json>` — jeśli używasz dumpów
@@ -80,7 +80,7 @@ Ważne: w projekcie autorsko zmodyfikowany model użytkownika `Uzytkownik` i mod
    - `docker-compose exec backend python manage.py createsuperuser`
 7. (Opcjonalnie) załaduj dane testowe:
    - `docker-compose exec backend python manage.py shell -c "from wolontariat.seed import seed_data; seed_data()"`
-   - W repo istnieje `seed.py` — uruchamiany skrypt tworzy kilka organizacji, użytkowników, projektów, ofert, zleceń i wiadomości.
+   - W repo istnieje `seed.py` — zawiera kilka organizacji, użytkowników, projektów, ofert, zleceń i wiadomości.
 
 Frontend dostępny domyślnie pod `http://localhost:3000`, backend API pod `http://localhost:8080/api/`.
 
@@ -137,15 +137,24 @@ W kodzie klient używa tokenu DRF w `localStorage` pod kluczem `token`.
 - Jeżeli aplikacja nie łączy się z bazą, upewnij się, że kontener `db` jest zdrowy (`docker ps`, `docker logs postgres-db`).
 
 ### 2. Tworzenie superużytkownika i dostęp do panelu admina
-- `docker-compose exec backend python manage.py createsuperuser`
-- Panel admin: `http://localhost:8080/admin/`
+System wykorzystuje wbudowany panel administracyjny Django do zarządzania danymi.
+#### Dostęp do panelu
+- Adres: `http://localhost:8080/admin/`
+- Superużytkownik jest tworzony po starcie kontenera.
+`sudo docker compose exec backend python manage.py createsuperuser`
 
-W panelu admin możesz:
-- przeglądać/edycję modeli: `Organizacja`, `Uzytkownik`, `Projekt`, `Oferta`, `Zlecenie`, `Recenzja`, `Wiadomosc`.
+#### W panelu admin możesz:
+Administrator ma pełny wgląd i możliwość edycji wszystkich modeli:
+- **Użytkownicy**: Zarządzanie rolami, danymi kontaktowymi i uprawnieniami.
+- **Organizacje**: Weryfikacja NIP-u i edycja danych organizacji.
+- **Zlecenia i Oferty**: Monitorowanie statusu aplikacji wolontariuszy oraz postępów w projektach.
+- **Recenzje**: Przegląd i moderacja wystawionych ocen.
 
 ### 3. Zarządzanie danymi testowymi i seed
 - Skrypt `wolontariat/seed.py` tworzy dane testowe. Możesz go uruchomić z `manage.py shell` (patrz wyżej).
 - Jeśli chcesz resetować dane: wykonaj kolejno usuwanie i migracje lub zrzut/restore bazy.
+- dane testowe są uzupełniane automatycznie. Aby to zmienić usuń w `dcoker-compose.yml`:
+`python manage.py shell < wolontariat/seed.py &&`
 
 ### 4. Bieżące zadania administracyjne
 - Weryfikacja organizacji: pole `Organizacja.weryfikacja` domyślnie ustawiane, jeśli NIP istnieje.
