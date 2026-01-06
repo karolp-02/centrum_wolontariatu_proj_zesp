@@ -1,0 +1,50 @@
+{% extends "admin/base.html" %} {% block title %} Admin Panel | Centrum
+Wolontariatu {% endblock %} {% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}"> CENTRUM WOLONTARIATU </a>
+</h1>
+{% endblock %} {% block extrastyle %} {{ block.super }}
+<style>
+    /* Modern Header Blue */
+    :root {
+        --primary: #2c3e50;
+        --accent: #e74c3c;
+        --link: #3498db;
+    }
+
+    /* Header Bar */
+    #header {
+        background: var(--primary);
+        color: #fff;
+        padding: 15px 20px;
+        border-bottom: 3px solid var(--accent);
+    }
+
+    /* Branding Text */
+    #branding h1 {
+        font-size: 20px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 600;
+    }
+
+    /* Buttons */
+    .button,
+    input[type="submit"],
+    .submit-row input.default {
+        background: var(--accent);
+        border-radius: 4px;
+        transition: 0.3s;
+    }
+    .button:hover,
+    input[type="submit"]:hover {
+        background: #c0392b;
+    }
+
+    /* Sidebar Filters */
+    #changelist-filter h2 {
+        background: var(--primary);
+        color: white;
+    }
+</style>
+{% endblock %}
